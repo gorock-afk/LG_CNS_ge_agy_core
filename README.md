@@ -10,9 +10,11 @@
 | 파트 | 시간 (90분 / 180분) | 핵심 주제 | 주요 기능 · 산출물 |
 | :--- | :---: | :--- | :--- |
 | **Part 0** | 10분 / 15분 | 환경 세팅 · 무중단 제어 · Gateway | 기업 계정 로그인(앱·CLI·VS Code), `Turbo`, `/btw`, `admin_config.json` |
-| **Part 1** | 30분 / 50분 | 설계 리뷰 ~ 브라우저 자율 디버깅 | `/grill-me`, `/plan`, `/browser`, `/goal`, `/generative_ui` |
-| **Part 2** | 30분 / 65분 | 4종 모델 비교 · 벤치마크 · 하네스 | `Carbon · Neon · Hydrogen · Gluon`, 3D 비교, 실무 벤치마크 3선, Zero Harness Tax |
-| **Part 3** | 20분 / 50분 | 멀티에이전트 · 자산화 · 업무용 Gemini | `/boost`, `/teamwork`, `/learn`, `/plugin`, Claude 전환, Gemini 데스크탑 |
+| **Part 1** | 25분 / 45분 | 설계 리뷰 ~ 브라우저 자율 디버깅 | `/grill-me`, `/plan`, `/browser`, `/goal`, `/generative_ui` |
+| **Part 2** | 25분 / 50분 | 4종 모델 비교 · 벤치마크 · 하네스 | `Carbon · Neon · Hydrogen · Gluon`, 3D 비교, 실무 벤치마크 3선, Zero Harness Tax |
+| **Part 3** | 15분 / 35분 | 멀티에이전트 · 팀 자산화 · 전환 | `/boost`, `/teamwork`, `/learn`, `/plugin`, Claude Code 1:1 매핑 |
+| **Part 4** | 10분 / 20분 | Hook & MCP 설정 | `.agents/hooks.json` 위험 명령 차단, `mcp_config.json` 로컬·원격 연동 |
+| **Part 5** | 5분 / 15분 | Gemini 데스크탑 앱 미리보기 | 코딩(Antigravity) vs 일반 업무(Gemini 데스크탑), 전사 `SKILL.md` 공유 |
 
 > **실습 전 준비:** 아래 버튼으로 **실습 파일 전체(`LGCNS_Workshop_Files.zip`)**를 내려받아 내 PC 작업 폴더(예: `lgcns-lab`)에 압축을 풀어 두세요.
 >
@@ -30,7 +32,9 @@
 | **05** | [`05_legacy_inventory_service.py`](./files/05_legacy_inventory_service.py) | Part 2 | 동시성·정밀도 버그 패치 과제 (`05_test_inventory_service.py` 포함) |
 | **06** | [`06_count_output.py`](./files/06_count_output.py) | Part 2 | 모델별 토큰 대비 출력 코드 줄 수 측정 스크립트 |
 | **07** | [`07_team_rule_example.md`](./files/07_team_rule_example.md) | Part 3 | `.agents/rules/` 팀 코딩·테스트 표준 규칙 예시 |
-| **08** | [`08_GE_Skill_executive_briefing_SKILL.md`](./files/08_GE_Skill_executive_briefing_SKILL.md) | Part 3 | 일반 업무용 Gemini에 바로 업로드해 쓰는 브리핑 `SKILL.md` |
+| **08** | [`08_GE_Skill_executive_briefing_SKILL.md`](./files/08_GE_Skill_executive_briefing_SKILL.md) | Part 5 | 일반 업무용 Gemini에 바로 업로드해 쓰는 브리핑 `SKILL.md` |
+| **09** | [`09_hooks_example.json`](./files/09_hooks_example.json) | Part 4 | `.agents/hooks.json` 설정 예시 (`09_block_dangerous_cmd.py` 가드 포함) |
+| **10** | [`10_mcp_config_example.json`](./files/10_mcp_config_example.json) | Part 4 | `mcp_config.json` 로컬(Stdio) · 원격(Streamable HTTP) 연동 예시 |
 
 </details>
 
@@ -179,7 +183,7 @@ python3 files/06_count_output.py
 
 ---
 
-# 🤝 Part 3. 멀티에이전트 · 팀 자산화 & 일반 업무 Gemini
+# 🤝 Part 3. 멀티에이전트 분업 · 팀 자산화 & 전환
 
 ### 🔹 Step 3-1. `/boost` 교차 검증 & `/teamwork` 파일 독점 병렬 구현
 
@@ -225,23 +229,123 @@ python3 files/06_count_output.py
 | :--- | :--- | :--- |
 | `Slash Commands` | `/grill-me` · `/plan` · `/goal` · `/boost` | 설계 인터뷰부터 브라우저 검증·교차검증까지 1줄 호출 |
 | `CLAUDE.md · Rules` | `.agents/rules/` · `AGENTS.md` | 기존 규칙 파일 재작성 없이 그대로 인식 + `/learn` 자동 추출 |
-| `Skills · Hooks · Plugin` | `.agents/skills/` · `Plugin` 폴더 | 검증된 `SKILL.md`와 스크립트를 폴더 하나로 묶어 팀 배포 |
+| `Skills · Hooks · Plugin` | `.agents/skills/` · `.agents/hooks.json` | 검증된 `SKILL.md`와 가드 스크립트를 폴더 하나로 묶어 팀 배포 |
 | 단일 모델 고정 | `Carbon · Neon · Hydrogen · Gluon` | 고난도 설계는 `Carbon`, 반복 편집·검증은 `Hydrogen · Gluon` |
 
 ---
 
-### 🔹 Step 3-3. 코딩은 Antigravity, 일반 업무는 Gemini (Desktop · Web)
+# 🔌 Part 4. Hook & MCPs 설정법
 
-> **핵심:** 개발·빌드·디버깅은 **Antigravity**에서, 메일 분류·미팅 준비·문서 요약 등 일상 업무는 **Gemini (Desktop · Web)**에서 처리하되 **동일한 `SKILL.md` · MCP · 보안 거버넌스 표준**으로 연결합니다.
+### 🔹 Step 4-1. Hook 설정법 (`.agents/hooks.json`)
 
-1️⃣ **Gemini 데스크탑 & 웹 핵심 화면 (`Tasks` · `Scheduled` · `Projects`)**:
-- **`Tasks` & `Scheduled`**: 백그라운드 비동기 업무 지시 및 정기 루틴 자동 실행
-- **`Projects`**: 부서 문서·양식을 폴더 단위로 묶어 일관된 맥락 유지
-- **일상 업무 자동화**: 메일함 우선순위 분류, 내일 미팅 브리핑, 메일·채팅·문서 내 액션 아이템 추출
+> **핵심:** 마크다운 `Rule`이 모델에게 드리는 권고라면, **`Hook`(`hooks.json`)은 도구 실행 직전(`PreToolUse`)·직후(`PostToolUse`)에 셸·파이썬 스크립트를 100% 강제 실행**하는 결정론적 안전장치입니다.
 
-![Step 3-3-1 일반 업무용 Gemini 데스크탑 앱 화면](assets/screenshots/gemini_desktop_surface.png)
+| 주요 이벤트 | 실행 시점 | 실무 활용 예시 |
+| :--- | :--- | :--- |
+| **`PreToolUse`** | 도구(`run_command` 등) 실행 직전 | `rm -rf`, `DROP TABLE`, `git push --force` 명령 하드 차단 (`"decision": "deny"`) |
+| **`PostToolUse`** | 도구 실행 완료 직후 | 코드 수정 후 자동 린터(`ruff`, `eslint`) 및 포맷터 실행 |
+| **`SessionStart` / `Stop`** | 대화 시작 시 / 루프 종료 시 | 사내 환경변수 점검, 작업 감사 로그 기록 |
 
-2️⃣ **코딩 없이 30초 만에 만드는 업무용 `Skill` (그리고 개발팀 `SKILL.md` 재사용)**:
-- 일반 직원은 `Skills ➔ + Create skill`에서 **`이름` · `설명` · `안내`** 3칸만 적어 `/my-skill` 단축키를 즉시 만들 수 있고, 개발팀이 Antigravity에서 검증한 표준 `.md`/`.zip` 스킬(`08_GE_Skill_executive_briefing_SKILL.md`)도 그대로 업로드해 전사가 함께 씁니다.
+1️⃣ **설정 위치**: 프로젝트 루트의 **`.agents/hooks.json`** (팀 공유용) 또는 **`~/.gemini/config/hooks.json`** (개인 전역)에 배치합니다.
 
-![Step 3-3-2 화면에서 텍스트로 바로 등록하는 업무용 Skill](assets/screenshots/ge_skill_create_text.png)
+2️⃣ **실습 파일(`09_hooks_example.json` + `09_block_dangerous_cmd.py`) 적용해보기**:
+- 아래 명령어로 실습 폴더의 샘플 Hook을 `.agents/hooks.json`에 등록합니다.
+
+```bash
+mkdir -p .agents && cp files/09_hooks_example.json .agents/hooks.json && cp files/09_block_dangerous_cmd.py .agents/09_block_dangerous_cmd.py
+```
+
+<details class="file-list-details">
+<summary><strong>📄 `.agents/hooks.json` 스키마 및 입출력 규약 보기 (클릭하여 펼치기)</strong></summary>
+
+```python
+# .agents/hooks.json 구조:
+# {
+#   "safety-guard": {
+#     "PreToolUse": [{
+#       "matcher": "run_command",
+#       "hooks": [{ "type": "command", "command": "python3 ./09_block_dangerous_cmd.py", "timeout": 5 }]
+#     }]
+#   }
+# }
+#
+# stdin 입력: {"toolCall": {"name": "run_command", "args": {"CommandLine": "..."}}}
+# stdout 출력: {"decision": "deny", "reason": "위험 명령 차단"}  (allow | deny | ask | force_ask)
+```
+
+</details>
+
+3️⃣ **차단 동작 확인**: 채팅창에서 에이전트에게 위험 명령 시뮬레이션을 요청하면, 실행 전에 Hook이 즉시 가로채 차단 이유를 표시합니다.
+
+```text
+테스트 삼아 터미널에서 DROP TABLE orders 문자열이 포함된 echo 명령을 한 번 실행해봐.
+```
+
+---
+
+### 🔹 Step 4-2. MCP 설정법 (`mcp_config.json`)
+
+> **핵심:** 사내 DB·이슈 트래커·내부 API를 표준 **Model Context Protocol(MCP)**로 연결하면 에이전트가 별도 플러그인 개발 없이 즉시 도구로 호출합니다.
+
+| 연결 방식 (Transport) | 필수 키 | 추천 상황 |
+| :--- | :--- | :--- |
+| **1. 로컬 Stdio** | `"command"`, `"args"`, `"env"` | 내 PC에서 돌아가는 CLI 도구, 로컬 SQLite/Git, 사내 스크립트 브리지 |
+| **2. 원격 Streamable HTTP** | `"url": "https://.../mcp"` | 사내 Cloud Run · GKE 등에 배포된 중앙 MCP 게이트웨이 연동 (`/sse` 대신 `/mcp` 사용) |
+
+1️⃣ **설정 위치**: 개인 전역 **`~/.gemini/config/mcp_config.json`** 또는 팀 플러그인 루트 **`plugins/<플러그인명>/mcp_config.json`**에 작성합니다. (`files/10_mcp_config_example.json` 참고)
+
+```python
+# ~/.gemini/config/mcp_config.json 예시
+{
+  "mcpServers": {
+    "local-sqlite-readonly": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-sqlite", "./warehouse.db"],
+      "env": { "DB_READONLY": "true" }
+    },
+    "corp-wms-gateway": {
+      "url": "https://mcp-gateway.internal.example.com/mcp"
+    }
+  }
+}
+```
+
+2️⃣ **연결 상태 및 노출 도구 확인**:
+- Antigravity 우측 상단 **`Additional Options (...)` ➔ `MCP Servers`** 메뉴를 열면 현재 연결된 서버 상태와 에이전트에 주입된 도구 목록을 한눈에 확인하고 토글할 수 있습니다.
+- 또한 에이전트에게 말로 바로 설정 초안을 생성하게 할 수도 있습니다.
+
+```text
+@10_mcp_config_example.json 이 예시 파일을 참고해서 우리 팀 사내 읽기 전용 DB와 원격 API를 연결하는 MCP 설정 템플릿을 만들어줘.
+```
+
+---
+
+# 🖥️ Part 5. Gemini 데스크탑 앱 미리보기
+
+### 🔹 Step 5-1. 코딩은 Antigravity, 일반 업무는 Gemini 데스크탑
+
+> **핵심:** 코드 작성·빌드·디버깅은 **Antigravity**에 맡기고, 메일 분류·미팅 준비·문서 정리 같은 전사 일상 업무는 깔끔한 전용 **Gemini 데스크탑 앱(및 웹)**으로 분리합니다.
+
+![Step 5-1 일반 업무용 Gemini 데스크탑 앱 화면](assets/screenshots/gemini_desktop_surface.png)
+
+1️⃣ **좌측 메뉴 4대 핵심 구성**:
+- **`Tasks`**: 백그라운드에서 진행 중이거나 내 확인·승인을 기다리는 비동기 업무 함
+- **`Scheduled`**: 매일 아침 브리핑·주간 동향 정리 등 정기 자동 실행 루틴 관리
+- **`Customize`**: 나만의 `Skills` · `Memory` · 사내 연결 앱(Workspace, Jira 등) 설정
+- **`Projects`**: 부서 문서·참고 자료를 폴더 단위로 묶어 일관된 업무 맥락 유지
+
+2️⃣ **대표 일상 업무 시나리오 (우측 시작 화면 Suggestions)**:
+- **메일함 우선순위 분류 (`Triage my inbox`)**: 급한 회신이 필요한 메일과 참고용 메일 자동 구분
+- **내일 미팅 맥락 브리핑 (`Prep me for tomorrow`)**: 캘린더 일정과 관련 문서를 엮어 사전 요약
+- **액션 아이템 통합 추출 (`Find my action items`)**: 메일·채팅·회의록에 흩어진 내 할 일 한 번에 수집
+
+---
+
+### 🔹 Step 5-2. 동일한 `SKILL.md` 표준으로 개발팀 ↔ 현업 연결
+
+1️⃣ **코딩 없이 30초 만에 만드는 현업용 텍스트 `Skill`**:
+- 비개발 직군도 `Skills ➔ + Create skill` 화면에서 **`① 이름` · `② 설명` · `③ 안내(지침)`** 3칸만 입력하면 즉시 `/my-skill` 단축키를 만들어 쓸 수 있습니다.
+![Step 5-2 화면에서 텍스트로 바로 등록하는 업무용 Skill](assets/screenshots/ge_skill_create_text.png)
+
+2️⃣ **개발팀이 만든 표준 스킬·거버넌스 전사 재사용**:
+- 개발 조직이 Antigravity에서 만들고 검증한 `.md` / `.zip` 스킬(`08_GE_Skill_executive_briefing_SKILL.md`)과 사내 MCP · Agent Gateway 정책이 **Gemini 데스크탑과 웹에도 동일한 표준으로 연결**되어, 코딩 도구를 넘어 전사 AX 자산으로 확장됩니다.
