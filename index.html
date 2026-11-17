@@ -1,0 +1,642 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" href="data:,">
+  <title>LG CNS · Antigravity & Gemini 핵심 실습 포털</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;700&family=Noto+Sans+KR:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/marked@13.0.3/marked.min.js"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+  <style>
+    :root {
+      --accent: #A50034;
+      --accent-dark: #8A002B;
+      --accent-muted: #475569;
+      --accent-soft: #FDF2F4;
+      --accent-border: #F5C2CE;
+      --point-burgundy: #A50034;
+      --bg-main: #ffffff;
+      --bg-surface: #f8fafc;
+      --bg-sidebar: #fafafa;
+      --text-primary: #111827;
+      --text-secondary: #4b5563;
+      --text-muted: #6b7280;
+      --border-color: #e5e7eb;
+      --divider-color: #f3f4f6;
+      --radius-sm: 6px;
+      --radius-md: 8px;
+      --radius-lg: 12px;
+      --radius-full: 9999px;
+      --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04);
+      --shadow-md: 0 2px 8px rgba(15, 23, 42, 0.06);
+      --font-sans: "Google Sans", "Noto Sans KR", -apple-system, BlinkMacSystemFont, sans-serif;
+      --font-mono: "JetBrains Mono", Consolas, monospace;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; font-size: 15.5px; }
+    body {
+      font-family: var(--font-sans);
+      background: var(--bg-main);
+      color: var(--text-primary);
+      line-height: 1.7;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* Subtle 2px LG Signature Progress Bar */
+    .top-brand-bar {
+      height: 2px; background: #f1f5f9; width: 100%; position: fixed; top: 0; left: 0; z-index: 1000;
+    }
+    .reading-progress-bar {
+      height: 2px; background: var(--accent); width: 0%; position: fixed; top: 0; left: 0; z-index: 1001; transition: width 0.1s ease-out;
+    }
+
+    /* Minimal Toned-Down Header */
+    header.app-header {
+      position: sticky; top: 2px; background: rgba(255,255,255,0.96); backdrop-filter: blur(10px);
+      border-bottom: 1px solid var(--border-color); z-index: 990; padding: 0.6rem 1.5rem;
+      display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap;
+    }
+    .header-left { display: flex; align-items: center; gap: 0.65rem; }
+    .brand-pill {
+      background: var(--accent); color: #ffffff; border: 1px solid var(--accent);
+      font-weight: 700; font-size: 0.72rem; padding: 0.2rem 0.55rem; border-radius: 5px; letter-spacing: 0.04em;
+    }
+    .header-title { font-weight: 700; font-size: 1.05rem; color: #111827; letter-spacing: -0.02em; }
+    .header-title span { color: var(--accent); font-weight: 700; }
+
+    /* Calm Part Filter Bar */
+    .part-nav-bar {
+      background: #ffffff; border-bottom: 1px solid var(--border-color);
+      padding: 0.45rem 1.5rem; position: sticky; top: 53px; z-index: 980;
+      display: flex; align-items: center; gap: 0.4rem; overflow-x: auto;
+    }
+    .part-tab {
+      border: 1px solid transparent; background: transparent; color: #64748b;
+      padding: 0.3rem 0.75rem; border-radius: 6px; font-size: 0.82rem;
+      font-weight: 600; cursor: pointer; white-space: nowrap; transition: all 0.15s ease;
+    }
+    .part-tab:hover { background: #FDF2F4; color: var(--accent); }
+    .part-tab.active {
+      background: var(--accent); color: #ffffff; border-color: var(--accent);
+    }
+
+    .header-right { display: flex; align-items: center; gap: 0.45rem; flex-wrap: wrap; }
+    .btn {
+      display: inline-flex; align-items: center; gap: 0.35rem; font-size: 0.8rem; font-weight: 600;
+      padding: 0.38rem 0.8rem; border-radius: 6px; text-decoration: none; border: 1px solid #d1d5db;
+      background: #ffffff; color: #374151 !important; cursor: pointer; transition: all 0.15s;
+    }
+    .btn:hover { background: #f9fafb; border-color: #9ca3af; color: #111827 !important; }
+    .btn-zip {
+      background: var(--accent); color: #ffffff !important; border-color: var(--accent);
+    }
+    .btn-zip:hover { background: var(--accent-dark); border-color: var(--accent-dark); color: #ffffff !important; }
+    .btn-primary {
+      background: #ffffff; color: var(--accent) !important; border-color: var(--accent-border);
+    }
+    .btn-primary:hover { background: var(--accent-soft); border-color: var(--accent); }
+
+    .portal-layout {
+      display: grid; grid-template-columns: 248px minmax(0, 1fr); max-width: 1320px; margin: 0 auto;
+    }
+    @media (max-width: 980px) {
+      .portal-layout { grid-template-columns: 1fr; }
+      aside.toc-sidebar { display: none; }
+    }
+
+    /* Notion / Linear Style Clean Left Sidebar */
+    aside.toc-sidebar {
+      position: sticky; top: 96px; height: calc(100vh - 96px); overflow-y: auto;
+      background: var(--bg-sidebar); border-right: 1px solid var(--border-color); padding: 1rem 0.75rem 3rem;
+    }
+    .toc-zip-card { display: none; }
+    .toc-search-box {
+      width: 100%; padding: 0.42rem 0.65rem; border: 1px solid #e5e7eb;
+      border-radius: 6px; font-size: 0.79rem; margin-bottom: 0.8rem; background: #fff; color: #374151;
+    }
+    .toc-search-box:focus { outline: none; border-color: var(--accent); }
+    .toc-group-label {
+      font-size: 0.72rem; font-weight: 700; color: #64748b; text-transform: uppercase;
+      padding: 0.5rem 0.5rem 0.25rem; margin-top: 0.65rem;
+      border-top: 1px solid #f1f5f9; letter-spacing: 0.02em;
+      display: flex; align-items: center; gap: 0.3rem; cursor: pointer;
+    }
+    .toc-group-label:first-of-type { margin-top: 0; border-top: none; padding-top: 0.1rem; }
+    .toc-link {
+      display: flex; align-items: center; justify-content: space-between;
+      text-decoration: none; color: #4b5563; font-size: 0.81rem; font-weight: 500;
+      padding: 0.32rem 0.5rem 0.32rem 0.65rem; border-radius: 5px; margin-bottom: 1px;
+      line-height: 1.35; border-left: 2px solid transparent; transition: all 0.12s;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .toc-link:hover { background: #f3f4f6; color: #111827; }
+    .toc-link.active {
+      background: var(--accent-soft); color: var(--accent); font-weight: 700; border-left-color: var(--accent);
+    }
+    .toc-link.challenge-item { color: #6b7280; font-weight: 500; }
+    .toc-link.challenge-item.active {
+      background: var(--accent-soft); color: var(--accent); border-left-color: var(--accent);
+    }
+
+    main.reader-content {
+      padding: 2rem 3rem 5rem; max-width: 920px; width: 100%;
+    }
+    @media (max-width: 640px) { main.reader-content { padding: 1.25rem 1rem 4rem; } }
+
+    /* Clean Neutral Hero Card */
+    .lab-reader-hero {
+      background: #f8fafc; border: 1px solid #e2e8f0;
+      border-radius: var(--radius-lg); padding: 1.5rem 1.75rem; margin-bottom: 2rem;
+    }
+    .hero-badge {
+      display: inline-flex; align-items: center; gap: 0.35rem; background: var(--accent-soft);
+      color: var(--accent); border: 1px solid var(--accent-border); font-size: 0.74rem; font-weight: 700; padding: 0.22rem 0.6rem;
+      border-radius: 4px; margin-bottom: 0.65rem;
+    }
+    .hero-title { font-size: 1.65rem; font-weight: 800; color: #111827; line-height: 1.3; margin-bottom: 0.45rem; letter-spacing: -0.02em; }
+    .hero-desc { font-size: 0.94rem; color: #4b5563; margin-bottom: 0.9rem; }
+    .hero-actions { display: none; }
+    .meta-chips { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+    .meta-chip {
+      font-size: 0.78rem; background: #ffffff; border: 1px solid #e2e8f0;
+      padding: 0.22rem 0.65rem; border-radius: 6px; color: #4b5563; font-weight: 500;
+    }
+
+    /* Clean Section Headings */
+    .markdown-body h1 {
+      font-size: 1.45rem; font-weight: 800; margin-top: 3rem; margin-bottom: 1.1rem;
+      padding: 0 0 0.65rem 0; background: transparent; color: #111827;
+      border-bottom: 2px solid #e5e7eb; border-radius: 0; box-shadow: none; letter-spacing: -0.02em;
+    }
+
+    .markdown-body h2, .markdown-body h3 {
+      font-size: 1.12rem; font-weight: 700; margin-top: 2.1rem; margin-bottom: 0.9rem;
+      padding: 0.6rem 0.95rem; background: #f8fafc;
+      border: 1px solid #e5e7eb; border-left: 3px solid var(--accent); border-radius: 6px;
+      color: #111827; display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap;
+    }
+    .markdown-body h3.challenge-heading {
+      background: #fafafa; border-left-color: var(--accent); border-style: dashed; border-left-style: solid;
+    }
+    .step-pill {
+      background: var(--accent); color: #fff; font-size: 0.7rem; font-weight: 700;
+      padding: 0.16rem 0.52rem; border-radius: 4px; letter-spacing: 0.03em; flex-shrink: 0;
+    }
+    .step-pill.challenge-pill { background: var(--accent); }
+    .step-check-btn {
+      margin-left: auto; background: #ffffff; border: 1px solid #d1d5db; color: #6b7280;
+      font-size: 0.73rem; font-weight: 600; padding: 0.18rem 0.55rem; border-radius: 5px; cursor: pointer;
+    }
+    .step-check-btn:hover { border-color: #9ca3af; color: #111827; }
+    .step-check-btn.done { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+
+    .markdown-body p { margin-bottom: 0.8rem; color: #374151; font-size: 0.97rem; }
+    .markdown-body ul, .markdown-body ol { margin-bottom: 0.95rem; padding-left: 1.4rem; color: #374151; }
+    .markdown-body li { margin-bottom: 0.32rem; font-size: 0.96rem; }
+    .markdown-body strong { color: #111827; font-weight: 700; }
+
+    /* Toned-down Neutral Inline Code (`...`) */
+    .markdown-body :not(pre) > code {
+      background: #f3f4f6 !important; color: #1f2937 !important; border: 1px solid #e5e7eb !important;
+      padding: 0.12rem 0.38rem !important; border-radius: 4px !important; font-family: var(--font-mono) !important;
+      font-size: 0.86em !important; font-weight: 600 !important;
+    }
+    .markdown-body a > code {
+      background: var(--accent-soft) !important; color: var(--accent) !important; border-color: var(--accent-border) !important;
+      text-decoration: underline !important; text-underline-offset: 3px !important; font-weight: 600 !important;
+    }
+    .markdown-body a { color: var(--accent); font-weight: 600; text-underline-offset: 3px; }
+
+    /* Calm Callout Blockquote */
+    .markdown-body blockquote {
+      background: #f9fafb; border: 1px solid #e5e7eb; border-left: 3px solid var(--accent);
+      border-radius: 6px; padding: 0.75rem 1.05rem; margin: 0.9rem 0; color: #4b5563; font-size: 0.92rem;
+    }
+
+    /* Toned-down Neutral Prompt Card */
+    .code-block-wrapper {
+      margin: 1rem 0 1.3rem; border-radius: 8px; overflow: hidden;
+      border: 1px solid #d1d5db; background: #ffffff; box-shadow: var(--shadow-sm);
+    }
+    .code-block-header {
+      display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; flex-wrap: wrap;
+      padding: 0.42rem 0.9rem; background: #f8fafc;
+      border-bottom: 1px solid #e5e7eb; font-size: 0.77rem; font-weight: 600; color: #475569;
+      user-select: none; -webkit-user-select: none;
+    }
+    .ag-header-chip {
+      display: inline-flex; align-items: center; gap: 0.25rem;
+      background: var(--accent-soft); color: var(--accent);
+      border: 1px solid var(--accent-border); border-radius: 4px;
+      padding: 0.08rem 0.42rem; font-family: var(--font-mono); font-weight: 700; font-size: 0.75rem;
+    }
+    .ag-header-kbd {
+      display: inline-block; background: #ffffff; color: #374151;
+      border: 1px solid #cbd5e1; border-bottom-width: 2px; border-radius: 4px;
+      padding: 0.05rem 0.35rem; font-family: var(--font-sans); font-size: 0.7rem; font-weight: 700;
+    }
+    /* Non-copyable Antigravity Skill Chip inside Prompt Body (rendered via CSS pseudo-elements so it cannot be copied) */
+    .ag-skill-chip {
+      display: inline-flex; align-items: center; gap: 0.35rem;
+      background: var(--accent-soft); border: 1.5px solid var(--accent-border);
+      border-radius: 6px; padding: 0.14rem 0.55rem; margin-right: 0.48rem; margin-bottom: 0.15rem;
+      vertical-align: baseline; user-select: none; -webkit-user-select: none; -moz-user-select: none;
+      cursor: default;
+    }
+    .ag-skill-chip::before {
+      content: attr(data-cmd);
+      color: var(--accent); font-family: var(--font-mono); font-weight: 800; font-size: 0.86rem;
+    }
+    .ag-skill-chip::after {
+      content: attr(data-kbd);
+      background: #ffffff; color: #475569; border: 1px solid #cbd5e1; border-bottom-width: 2px;
+      border-radius: 4px; padding: 0.04rem 0.36rem; font-family: var(--font-sans);
+      font-size: 0.68rem; font-weight: 700; letter-spacing: -0.01em;
+    }
+    .code-copy-btn {
+      display: inline-flex; align-items: center; gap: 0.3rem; background: #ffffff;
+      border: 1px solid var(--accent-border); border-radius: 5px; font-size: 0.75rem; font-weight: 600;
+      padding: 0.22rem 0.65rem; cursor: pointer; color: var(--accent); transition: all 0.15s;
+    }
+    .code-copy-btn:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
+    .code-copy-btn.copied { background: var(--accent-dark) !important; color: #fff !important; border-color: var(--accent-dark) !important; }
+
+    .markdown-body pre {
+      margin: 0 !important; padding: 0.95rem 1.1rem !important; background: #ffffff !important;
+      overflow-x: auto; font-family: var(--font-mono); font-size: 0.9rem; line-height: 1.65;
+      color: #111827 !important; white-space: pre-wrap !important; word-break: keep-all; overflow-wrap: break-word !important;
+    }
+    .markdown-body pre > code {
+      background: transparent !important; color: inherit !important; border: none !important; padding: 0 !important;
+      white-space: pre-wrap !important; word-break: keep-all; overflow-wrap: break-word !important; display: block;
+    }
+    .prompt-card pre {
+      overflow-x: hidden !important;
+    }
+
+    /* Clean Screenshot Frame */
+    .screenshot-figure {
+      margin: 0.9rem 0 1.5rem; display: flex; flex-direction: column; align-items: flex-start;
+    }
+    .screenshot-frame {
+      position: relative; display: inline-block; max-width: 680px; width: 100%;
+      border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden;
+      box-shadow: var(--shadow-md); background: #ffffff; cursor: zoom-in; transition: border-color 0.15s;
+    }
+    .screenshot-frame:hover { border-color: #94a3b8; }
+    .screenshot-frame img {
+      display: block; width: 100%; height: auto; max-height: 440px; object-fit: contain; background: #fff;
+    }
+    .zoom-hint {
+      position: absolute; bottom: 8px; right: 10px; background: rgba(15, 23, 42, 0.72);
+      color: #fff; font-size: 0.7rem; font-weight: 500; padding: 2px 7px; border-radius: 4px;
+      pointer-events: none;
+    }
+    .screenshot-caption {
+      margin-top: 0.38rem; font-size: 0.8rem; color: #6b7280; font-weight: 500;
+    }
+
+    .markdown-body table {
+      width: 100%; border-collapse: collapse; margin: 1rem 0 1.4rem; font-size: 0.88rem;
+      border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden;
+    }
+    .markdown-body th {
+      background: #f9fafb; color: #111827; font-weight: 700; padding: 0.65rem 0.85rem;
+      border-bottom: 1px solid #e5e7eb; text-align: left;
+    }
+    .markdown-body td {
+      padding: 0.6rem 0.85rem; border-bottom: 1px solid #f3f4f6; color: #374151;
+    }
+
+    .markdown-body details {
+      margin: 0.75rem 0 1.4rem; border: 1px solid #e2e8f0; border-radius: 8px;
+      background: #f8fafc; overflow: hidden;
+    }
+    .markdown-body details > summary {
+      padding: 0.65rem 1rem; cursor: pointer; font-size: 0.9rem; color: #334155;
+      background: #f8fafc; user-select: none; transition: background 0.15s;
+    }
+    .markdown-body details > summary:hover {
+      background: #f1f5f9; color: #111827;
+    }
+    .markdown-body details[open] > summary {
+      border-bottom: 1px solid #e2e8f0; background: #f1f5f9;
+    }
+    .markdown-body details table {
+      margin: 0; border: none; border-radius: 0; background: #ffffff;
+    }
+
+    .lightbox-overlay {
+      display: none; position: fixed; inset: 0; background: rgba(15, 23, 42, 0.88);
+      z-index: 2000; align-items: center; justify-content: center; padding: 2rem; cursor: zoom-out;
+    }
+    .lightbox-overlay.open { display: flex; }
+    .lightbox-overlay img {
+      max-width: 94vw; max-height: 90vh; border-radius: 8px; box-shadow: 0 12px 36px rgba(0,0,0,0.5); background: #fff;
+    }
+  </style>
+</head>
+<body>
+  <div class="top-brand-bar"></div>
+  <div class="reading-progress-bar" id="progress-bar"></div>
+
+  <header class="app-header">
+    <div class="header-left">
+      <span class="brand-pill">LG CNS</span>
+      <div class="header-title">Antigravity &amp; <span>Gemini 4</span> 핵심 실습 포털</div>
+    </div>
+    <div class="header-right">
+      <a href="./LGCNS_Workshop_Files.zip" download="LGCNS_Workshop_Files.zip" class="btn btn-zip">📥 실습 파일 ZIP 다운로드</a>
+      <a href="./LGCNS_Workshop_Slides.pdf" target="_blank" class="btn btn-primary">📄 강의 슬라이드 PDF 보기</a>
+    </div>
+  </header>
+
+  <nav class="part-nav-bar" id="part-nav">
+    <button class="part-tab active" onclick="filterPart('all', this)">전체 보기</button>
+    <button class="part-tab" onclick="filterPart('part-0', this)">Part 0. 로그인·제어</button>
+    <button class="part-tab" onclick="filterPart('part-1', this)">Part 1. 설계·디버깅</button>
+    <button class="part-tab" onclick="filterPart('part-2', this)">Part 2. 4모델·벤치마크</button>
+    <button class="part-tab" onclick="filterPart('part-3', this)">Part 3. 멀티에이전트·Gemini</button>
+  </nav>
+
+  <div class="portal-layout">
+    <aside class="toc-sidebar">
+      <input type="text" class="toc-search-box" id="toc-search" placeholder="🔍 메뉴 빠른 검색..." oninput="filterToc(this.value)">
+      <div id="toc-container"></div>
+    </aside>
+
+    <main class="reader-content">
+      <div class="lab-reader-hero">
+        <div class="hero-badge">CORE HANDS-ON PORTAL · CARBON · NEON · HYDROGEN · GLUON</div>
+        <h1 class="hero-title">LG CNS · Antigravity &amp; Gemini 핵심 실습 가이드</h1>
+        <p class="hero-desc">
+          우측 상단 <strong>[📥 실습 파일 ZIP 다운로드]</strong>를 받아 압축을 풀고, 좌측 목차 순서대로 복사해 실행하세요.
+        </p>
+        <div class="meta-chips">
+          <span class="meta-chip">구성: <strong>Part 0 ~ Part 3 핵심 요약</strong></span>
+          <span class="meta-chip">모델 라인업: <strong>Carbon · Neon · Hydrogen · Gluon</strong></span>
+          <span class="meta-chip">이미지 클릭 시 <strong>원본 확대(Zoom)</strong></span>
+        </div>
+      </div>
+
+      <div id="markdown-container" class="markdown-body"></div>
+    </main>
+  </div>
+
+  <div class="lightbox-overlay" id="lightbox" onclick="this.classList.remove('open')">
+    <img id="lightbox-img" src="" alt="확대 이미지">
+  </div>
+
+  <script>
+    const EMBEDDED_MD = "# LG CNS · Antigravity & Gemini 핵심 실습 가이드\n\n> **직관적인 Step-by-Step 핵심 요약 포털**  \n> 불필요한 부가 설명을 덜어내고 **① 어디를 클릭하는지 ➔ ② 무엇을 복사해 넣는지 ➔ ③ 어떤 화면이 나오는지** 핵심만 남겼습니다.\n\n---\n\n## 0. 전체 커리큘럼 로드맵 & 실습 파일 받기\n\n| 파트 | 시간 (90분 / 180분) | 핵심 주제 | 주요 기능 · 산출물 |\n| :--- | :---: | :--- | :--- |\n| **Part 0** | 10분 / 15분 | 환경 세팅 · 무중단 제어 · Gateway | 기업 계정 로그인(앱·CLI·VS Code), `Turbo`, `/btw`, `admin_config.json` |\n| **Part 1** | 30분 / 50분 | 설계 리뷰 ~ 브라우저 자율 디버깅 | `/grill-me`, `/plan`, `/browser`, `/goal`, `/generative_ui` |\n| **Part 2** | 30분 / 65분 | 4종 모델 비교 · 벤치마크 · 하네스 | `Carbon · Neon · Hydrogen · Gluon`, 3D 비교, 실무 벤치마크 3선, Zero Harness Tax |\n| **Part 3** | 20분 / 50분 | 멀티에이전트 · 자산화 · 업무용 Gemini | `/boost`, `/teamwork`, `/learn`, `/plugin`, Claude 전환, Gemini 데스크탑 |\n\n> **실습 전 준비:** 아래 버튼으로 **실습 파일 전체(`LGCNS_Workshop_Files.zip`)**를 내려받아 내 PC 작업 폴더(예: `lgcns-lab`)에 압축을 풀어 두세요.\n>\n> 👉 <a href=\"./LGCNS_Workshop_Files.zip\" download=\"LGCNS_Workshop_Files.zip\"><strong>[📥 실습 파일 전체 ZIP 다운로드 (LGCNS_Workshop_Files.zip)]</strong></a>\n\n<details class=\"file-list-details\">\n<summary><strong>📂 포함된 실습 파일 목록 보기 (클릭하여 펼치기)</strong></summary>\n\n| 번호 | 파일명 | 사용 파트 | 역할 |\n| :---: | :--- | :---: | :--- |\n| **01** | [`01_buggy_wms_board.html`](./files/01_buggy_wms_board.html) | Part 1 | 결함이 숨어 있는 물류센터 작업 보드 (Self-Test 내장) |\n| **02** | [`02_3d_single_prompt.md`](./files/02_3d_single_prompt.md) | Part 2 | 단일 프롬프트 3D·물리 웹앱 비교용 레시피 |\n| **03** | [`03_service_call_graph.csv`](./files/03_service_call_graph.csv) | Part 2 | 마이크로서비스 호출 그래프 추론 데이터 (`03_graph_questions.md` 포함) |\n| **04** | [`04_wms_console_blueprint.png`](./files/04_wms_console_blueprint.png) | Part 2 | 2D 설계도 이미지 ➔ 동작하는 운영 콘솔 구현 과제 |\n| **05** | [`05_legacy_inventory_service.py`](./files/05_legacy_inventory_service.py) | Part 2 | 동시성·정밀도 버그 패치 과제 (`05_test_inventory_service.py` 포함) |\n| **06** | [`06_count_output.py`](./files/06_count_output.py) | Part 2 | 모델별 토큰 대비 출력 코드 줄 수 측정 스크립트 |\n| **07** | [`07_team_rule_example.md`](./files/07_team_rule_example.md) | Part 3 | `.agents/rules/` 팀 코딩·테스트 표준 규칙 예시 |\n| **08** | [`08_GE_Skill_executive_briefing_SKILL.md`](./files/08_GE_Skill_executive_briefing_SKILL.md) | Part 3 | 일반 업무용 Gemini에 바로 업로드해 쓰는 브리핑 `SKILL.md` |\n\n</details>\n\n---\n\n# 💻 Part 0. 환경 세팅 · 무중단 제어 & 엔터프라이즈 거버넌스\n\n### 🔹 Step 0-1. 기업 계정 2단계 로그인 (앱 · CLI · VS Code 공통)\n\n> **핵심:** 개인 Gmail이 아닌 **기업 Google Cloud 계정**으로 로그인해야 사내 라이선스 쿼터와 보안 정책이 적용됩니다.\n\n1️⃣ 첫 화면에서 회색 **`Use Business Account`** 버튼을 클릭합니다. (`Continue with Google` 클릭 금지)\n![Step 0-1-1 Use Business Account 선택](assets/screenshots/agy_login_step1_business.png)\n\n2️⃣ 다음 화면에서 파란색 **`Continue with Google Cloud`**를 눌러 사내 계정 인증을 완료합니다. (`Antigravity 앱`, `agy auth login` CLI, `VS Code 확장` 모두 동일)\n![Step 0-1-2 Continue with Google Cloud 클릭](assets/screenshots/agy_login_step2_gcloud.png)\n\n---\n\n### 🔹 Step 0-2. 멈추지 않는 실시간 조향 (`Turbo` · `/btw`) & Gateway 통제\n\n1️⃣ **권한 프리셋 전환 (`Turbo`)**: 매번 터미널 실행 승인을 누르기 번거로울 때는 입력창 우측 하단 모드를 **`Turbo`**로 두면 자율 실행됩니다.\n![Step 0-2 Turbo 모드 선택기](assets/screenshots/turbo_mode_selector.png)\n\n2️⃣ **작업 중 끼어들기 & 사이드 질문 (`/btw`)**: 에이전트가 코드를 고치는 도중에도 강제 중지(`Stop`)할 필요 없이 조건을 추가(`Send Immediately`)하거나, 맥락 오염 없이 옆 질문만 던질 수 있습니다.\n\n```text\n/btw 지금 열려 있는 폴더에서 테스트 코드가 들어 있는 파일 이름만 짧게 알려줘.\n```\n\n3️⃣ **Enterprise Gateway & MDM 일괄 제어 (`admin_config.json`)**:\n- **사내 Proxy 연동**: LiteLLM 및 자체 LLM 게이트웨이·중앙 GCP 서비스 계정으로 모든 트래픽과 예산을 일원화합니다.\n- **동일 보안 정책**: `admin_config.json` MDM 배포 하나로 앱 · CLI · VS Code 확장의 허용 모델과 도메인 URL을 동시에 통제합니다.\n\n---\n\n# 🛠️ Part 1. 설계 리뷰 ~ 브라우저 자율 디버깅 루프\n\n### 🔹 Step 1-1. `/grill-me` 역질문 설계 ➔ `/plan` 계획 승인\n\n> **핵심:** 바로 코드를 고치게 하지 않고, 에이전트가 먼저 빈틈을 질문(`/grill-me`)하게 한 뒤 수정 계획(`/plan`)을 검토·승인합니다.\n\n1️⃣ 압축을 푼 폴더를 열고 `/grill-me`와 `@01_buggy_wms_board.html`을 선택한 뒤 아래 문장을 입력합니다.\n\n```text\n/grill-me @01_buggy_wms_board.html 이 물류 작업 보드의 숨은 버그들을 고치기 전에 애매한 운영 기준부터 나에게 질문해줘.\n```\n\n2️⃣ 질문 카드에 답한 뒤, `/plan`으로 파일 수정 계획서를 먼저 받아 눈으로 확인합니다.\n\n```text\n/plan 방금 합의한 기준대로 작업 보드의 결함을 모두 수정하는 단계별 계획서를 작성해줘.\n```\n\n---\n\n### 🔹 Step 1-2. `/goal` + `/browser` 크롬 자율 조작 및 Self-Test 완주\n\n> **핵심:** 사람이 일일이 화면을 눌러보는 대신, 에이전트가 직접 크롬을 열어(`browser`) 내장 Self-Test가 모두 통과할 때까지 스스로 고치고 재검증(`/goal`)합니다.\n\n1️⃣ 아래 프롬프트로 브라우저 검증과 완료 조건을 한 번에 지시합니다.\n\n```text\n/goal @01_buggy_wms_board.html 브라우저로 화면을 직접 열어 내장된 Self-Test 항목이 전부 통과할 때까지 원인을 찾아 수정하고 검증해줘.\n```\n\n2️⃣ 수정 전 실패 화면(`FAIL`)에서 모든 테스트가 초록색 **`PASS`**로 바뀔 때까지 자율 루프가 도는 것을 확인합니다.\n![Step 1-2-1 수정 전 Self-Test 실패 상태](assets/screenshots/p1_selftest_fail.png)\n![Step 1-2-2 자율 디버깅 완료 후 전체 PASS 화면](assets/screenshots/p1_selftest_pass.png)\n\n---\n\n### 🔹 Step 1-3. `/generative_ui` 대화창 인라인 운영 시뮬레이터 생성\n\n> **핵심:** 별도 웹 프로젝트를 만들지 않아도, 채팅창 안에 바로 조작 가능한 계산기·시뮬레이터 위젯을 띄울 수 있습니다.\n\n1️⃣ `/generative_ui` 칩을 선택하고 아래 문장을 복사해 실행합니다.\n\n```text\n/generative_ui 물류센터 일일 물동량과 작업자 수를 슬라이더로 조절하면 시간당 처리량과 병목 위험도를 바로 계산해주는 시뮬레이터를 띄워줘.\n```\n\n![Step 1-3 채팅창 안에 즉시 렌더링되는 인터랙티브 위젯](assets/screenshots/generative_ui_calculator.png)\n\n---\n\n# 🧠 Part 2. 4종 모델 체급 비교 & 실무 벤치마크\n\n### 🔹 Step 2-1. 4종 모델 라인업(`Carbon ~ Gluon`) & 단일 프롬프트 3D 비교\n\n| 모델 라인업 | 권장 역할 | 언제 선택하나? |\n| :--- | :--- | :--- |\n| **Gemini 4 Carbon** | 최고난도 추론 · 아키텍처 · 1M 컨텍스트 | 다중 파일 설계, 복잡한 동시성·보안 감사, 원샷 3D·물리 구현 |\n| **Gemini 4 Neon** | 고성능 균형 엔지니어링 | 중대형 기능 구현, 복합 버그 디버깅, 멀티모달 UI 코드 생성 |\n| **Gemini 4 Hydrogen** | 주력 고속 코딩 · 반복 구현 | 일상적인 코드 편집, 테스트 작성, 빠른 브라우저 검증 루프 |\n| **Gemini 4 Gluon** | 초경량 · 초저지연 단순 작업 | 단순 포맷 변환, 짧은 요약, 반복 스캐폴딩 및 저비용 대량 처리 |\n\n1️⃣ 새 대화창 두 개를 열어 하나는 **`Hydrogen`**, 다른 하나는 **`Carbon`**으로 맞춘 뒤 같은 한 줄 프롬프트를 보내 물리 디테일과 완성도를 비교합니다.\n\n```text\nHTML 파일 하나로 말랑말랑한 젤리처럼 탄성 있게 움직이며 장애물을 피하는 로봇청소기 3D 물리 시뮬레이션을 만들어줘.\n```\n\n![Step 2-1 단일 프롬프트 물리 시뮬레이션 실행 예시](assets/screenshots/lg_jelly_robot_demo.png)\n\n---\n\n### 🔹 Step 2-2. 실무형 벤치마크 프롬프팅 3선 (호출 그래프 · 도면 · 레거시 패치)\n\n> **핵심:** 모델 체급 차이는 단순 문답보다 **긴 호출 추적**, **시각 설계도 구현**, **테스트 보존 리팩토링**에서 가장 뚜렷하게 드러납니다.\n\n1️⃣ **[과제 A — 호출 그래프 추론]** 스크립트 실행 없이 순수 추론만으로 장애 전파 경로를 먼저 답하게 합니다.\n\n```text\n@03_service_call_graph.csv 코드나 파이썬을 실행하지 말고 추론만으로 순환 호출 구간과 가장 파급력이 큰 단일 장애 노드를 찾아줘.\n```\n\n2️⃣ **[과제 B — 2D 설계도 ➔ 동작 콘솔]** 설계도 이미지를 첨부해 레이아웃과 상태 전환이 그대로 동작하는 화면을 만듭니다.\n\n```text\n@04_wms_console_blueprint.png 첨부한 설계도 이미지의 패널 구조와 인터랙션을 그대로 구현한 단일 HTML 운영 콘솔을 만들고 브라우저로 확인해줘.\n```\n\n![Step 2-2 설계도 기반 운영 콘솔 청사진](assets/screenshots/p2_blueprint.png)\n\n3️⃣ **[과제 C — 레거시 코드 안전 패치]** 기존 테스트 파일을 수정하지 않고 숨은 동시성·정밀도 결함만 정확히 고치게 합니다.\n\n```text\n@05_legacy_inventory_service.py 테스트 파일은 절대 수정하지 말고 재고 차감의 동시성 경합과 금액 반올림 오류를 패치해 모든 테스트를 통과시켜줘.\n```\n\n---\n\n### 🔹 Step 2-3. [데모] 토큰 효율 & Zero Harness Tax\n\n1️⃣ **토큰 대비 출력 밀도 확인**: 동일 프롬프트 실행 후 `/context` 토큰 사용량과 `06_count_output.py` 결과를 비교합니다.\n\n```bash\npython3 files/06_count_output.py\n```\n\n2️⃣ **왜 전용 CLI 대신 단일 Antigravity 하네스인가? (`Zero Harness Tax`)**:\n- **동등 이상의 해결 정확도**: DeepSWE v1.1 · Terminal-Bench 4.0 기준 전용 하네스(Claude Code · Codex) 대비 품질 손실 없이 동등 이상의 Pass@1을 기록합니다.\n- **12% 이내 토큰 경제성**: 표준 단가 기준 모든 구간에서 네이티브 하네스 대비 12% 이내 비용 효율을 유지하며, 반복 작업은 `Hydrogen · Gluon` 전환으로 비용을 대폭 낮춥니다.\n- **단일 거버넌스 표준화**: 모델별 개별 도구를 중복 배포하지 않고 Antigravity 하나로 통합 운영합니다.\n\n---\n\n# 🤝 Part 3. 멀티에이전트 · 팀 자산화 & 일반 업무 Gemini\n\n### 🔹 Step 3-1. `/boost` 교차 검증 & `/teamwork` 파일 독점 병렬 구현\n\n> **핵심:** 문제가 **깊고 까다로울 때는 `/boost`**(작성자·검증자 분리), 수정할 파일이 **넓게 퍼져 있을 때는 `/teamwork`**(워커별 파일 독점 병렬 처리)를 씁니다.\n\n![Step 3-1-1 /boost vs /teamwork 멀티에이전트 구조 비교](assets/screenshots/boost_vs_teamwork_architecture.png)\n\n1️⃣ **`/boost` 실습 (Worker 1 작성 ➔ Worker 2 백지 교차 검증)**: 작성자의 자기 합리화 추론을 버리고 백지 상태의 두 번째 워커가 적대적 감사를 수행합니다.\n\n```text\n/boost @05_legacy_inventory_service.py 동시성 락과 소수점 정산 로직을 보강한 뒤 별도 검증 워커가 엣지 케이스 공격 테스트로 교차 검증해줘.\n```\n\n2️⃣ **`/teamwork` 실습 (파일 소유권 분리 병렬 구현)**: 우측 `Subagents` 패널에서 워커들이 충돌 없이 각자 맡은 파일만 동시에 구현하는 흐름을 확인합니다.\n\n```text\n/teamwork 재고 API 모듈과 프론트엔드 대시보드, 검증 테스트를 파일별로 역할을 나누어 병렬로 구현하고 통합 검증해줘.\n```\n\n![Step 3-1-2 우측 패널에서 실시간으로 확인하는 멀티에이전트 실행 상태](assets/screenshots/multiagent_boost_teamwork.png)\n\n---\n\n### 🔹 Step 3-2. `/learn` · `/plugin` 팀 자산화 & Claude Code 전환 매핑\n\n1️⃣ **`/learn`으로 검증된 규칙 영구 저장**: 대화가 끝나면 사라질 지침을 `.agents/rules/` 파일로 남겨 다음 세션에도 자동 적용합니다.\n\n```text\n/learn 금액 계산에는 부동소수점 대신 Decimal만 쓰고 테스트 파일을 임의로 수정하지 않는다는 규칙을 프로젝트 룰로 저장해줘.\n```\n\n2️⃣ **`/plugin`으로 팀 배포 번들 패키징**: 규칙(`.agents/rules/`)과 스킬(`.agents/skills/`)을 폴더 하나로 묶어 팀원 전체에 배포합니다.\n\n```text\n/plugin 지금까지 저장한 프로젝트 코딩 규칙과 검증 스킬을 팀원들에게 바로 배포할 수 있는 플러그인 폴더로 묶어줘.\n```\n\n![Step 3-2 좌측 Customizations 및 플러그인 마켓플레이스 화면](assets/screenshots/customizations_marketplace.png)\n\n3️⃣ **기존 Claude Code 사용자 1:1 전환 매핑**:\n\n| 기존 개념 | Antigravity 대응 | 현장 전환 포인트 |\n| :--- | :--- | :--- |\n| `Slash Commands` | `/grill-me` · `/plan` · `/goal` · `/boost` | 설계 인터뷰부터 브라우저 검증·교차검증까지 1줄 호출 |\n| `CLAUDE.md · Rules` | `.agents/rules/` · `AGENTS.md` | 기존 규칙 파일 재작성 없이 그대로 인식 + `/learn` 자동 추출 |\n| `Skills · Hooks · Plugin` | `.agents/skills/` · `Plugin` 폴더 | 검증된 `SKILL.md`와 스크립트를 폴더 하나로 묶어 팀 배포 |\n| 단일 모델 고정 | `Carbon · Neon · Hydrogen · Gluon` | 고난도 설계는 `Carbon`, 반복 편집·검증은 `Hydrogen · Gluon` |\n\n---\n\n### 🔹 Step 3-3. 코딩은 Antigravity, 일반 업무는 Gemini (Desktop · Web)\n\n> **핵심:** 개발·빌드·디버깅은 **Antigravity**에서, 메일 분류·미팅 준비·문서 요약 등 일상 업무는 **Gemini (Desktop · Web)**에서 처리하되 **동일한 `SKILL.md` · MCP · 보안 거버넌스 표준**으로 연결합니다.\n\n1️⃣ **Gemini 데스크탑 & 웹 핵심 화면 (`Tasks` · `Scheduled` · `Projects`)**:\n- **`Tasks` & `Scheduled`**: 백그라운드 비동기 업무 지시 및 정기 루틴 자동 실행\n- **`Projects`**: 부서 문서·양식을 폴더 단위로 묶어 일관된 맥락 유지\n- **일상 업무 자동화**: 메일함 우선순위 분류, 내일 미팅 브리핑, 메일·채팅·문서 내 액션 아이템 추출\n\n![Step 3-3-1 일반 업무용 Gemini 데스크탑 앱 화면](assets/screenshots/gemini_desktop_surface.png)\n\n2️⃣ **코딩 없이 30초 만에 만드는 업무용 `Skill` (그리고 개발팀 `SKILL.md` 재사용)**:\n- 일반 직원은 `Skills ➔ + Create skill`에서 **`이름` · `설명` · `안내`** 3칸만 적어 `/my-skill` 단축키를 즉시 만들 수 있고, 개발팀이 Antigravity에서 검증한 표준 `.md`/`.zip` 스킬(`08_GE_Skill_executive_briefing_SKILL.md`)도 그대로 업로드해 전사가 함께 씁니다.\n\n![Step 3-3-2 화면에서 텍스트로 바로 등록하는 업무용 Skill](assets/screenshots/ge_skill_create_text.png)";
+
+    let allSections = [];
+
+    function getShortMenuLabel(rawText) {
+      const t = rawText.trim();
+      if (t.includes('0. 전체 커리큘럼')) return '0. 로드맵 & 실습 파일';
+      if (t.includes('Part 0.')) return '💻 Part 0. 로그인·제어';
+      if (t.includes('Step 0-1')) return '0-1. 기업 계정 로그인';
+      if (t.includes('Step 0-2')) return '0-2. Turbo·/btw·Gateway';
+      if (t.includes('Part 1.')) return '🛠️ Part 1. 설계·자율 디버깅';
+      if (t.includes('Step 1-1')) return '1-1. /grill-me & /plan';
+      if (t.includes('Step 1-2')) return '1-2. /goal·/browser 완주';
+      if (t.includes('Step 1-3')) return '1-3. /generative_ui 위젯';
+      if (t.includes('Part 2.')) return '🧠 Part 2. 4모델·벤치마크';
+      if (t.includes('Step 2-1')) return '2-1. 4종 라인업 & 3D 비교';
+      if (t.includes('Step 2-2')) return '2-2. 실무 벤치마크 3선';
+      if (t.includes('Step 2-3')) return '2-3. 토큰 효율·하네스';
+      if (t.includes('Part 3.')) return '🤝 Part 3. 멀티에이전트·Gemini';
+      if (t.includes('Step 3-1')) return '3-1. /boost & /teamwork';
+      if (t.includes('Step 3-2')) return '3-2. /learn·/plugin·전환';
+      if (t.includes('Step 3-3')) return '3-3. 업무용 Gemini 확장';
+      return t.slice(0, 22);
+    }
+
+    window.addEventListener('scroll', () => {
+      const winScroll = document.body.scrollTop || document.documentElement.scrollTop;
+      const height = document.documentElement.scrollHeight - document.documentElement.clientHeight;
+      document.getElementById('progress-bar').style.width = (height > 0 ? (winScroll / height) * 100 : 0) + '%';
+      updateActiveToc();
+    });
+
+    function initPortal() {
+      const container = document.getElementById('markdown-container');
+      let md = EMBEDDED_MD.replace(/^# .+
++/, '');
+      container.innerHTML = marked.parse(md);
+      enhanceHeadingsAndSections(container);
+      enhancePromptCards(container);
+      enhanceScreenshots(container);
+      buildToc();
+    }
+
+    function enhanceHeadingsAndSections(container) {
+      const children = Array.from(container.children);
+      let currentPart = 'intro';
+
+      children.forEach(el => {
+        if (el.tagName === 'H1') {
+          const txt = el.textContent;
+          if (txt.includes('Part 0')) currentPart = 'part-0';
+          else if (txt.includes('Part 1')) currentPart = 'part-1';
+          else if (txt.includes('Part 2')) currentPart = 'part-2';
+          else if (txt.includes('Part 3')) currentPart = 'part-3';
+          else currentPart = 'intro';
+        }
+        el.setAttribute('data-part', currentPart);
+      });
+
+      const headings = container.querySelectorAll('h1, h2, h3');
+      headings.forEach((h, idx) => {
+        const rawText = h.textContent.trim();
+        h.id = 'step-' + idx;
+        h.setAttribute('data-short-label', getShortMenuLabel(rawText));
+
+        if (h.tagName === 'H3' && rawText.includes('Step')) {
+          const match = rawText.match(/(Step\s+[0-9\-]+)/i);
+          const pillText = match ? match[1].toUpperCase() : 'STEP';
+          const cleanTitle = rawText.replace(/^🔹\s*Step\s+[0-9\-]+\.\s*/i, '');
+          h.innerHTML = `
+            <span class="step-pill">${pillText}</span>
+            <span style="flex:1;">${cleanTitle}</span>
+          `;
+        }
+      });
+    }
+
+    function enhancePromptCards(container) {
+      container.querySelectorAll('pre').forEach(pre => {
+        const code = pre.querySelector('code');
+        const lang = code ? (code.className || '') : '';
+        const isScript = lang.includes('python') || lang.includes('bash');
+        const isMdFile = lang.includes('markdown');
+        const part = pre.getAttribute('data-part') || (pre.closest('[data-part]') ? pre.closest('[data-part]').getAttribute('data-part') : '');
+
+        const wrapper = document.createElement('div');
+        wrapper.className = 'code-block-wrapper ' + ((isScript || isMdFile) ? 'code-script' : 'prompt-card');
+        if (part) wrapper.setAttribute('data-part', part);
+
+        const header = document.createElement('div');
+        header.className = 'code-block-header';
+        let labelHtml = isScript ? '💻 터미널 실행 명령어' : '✨ 대화창에 그대로 복사해 붙여넣을 프롬프트';
+        let btnTxt = isScript ? '명령어 복사' : '프롬프트 복사';
+
+        if (!isScript && !isMdFile && code) {
+          const rawPrompt = code.textContent.trim();
+          const multiTokenMatch = rawPrompt.match(/^((?:[\/@][a-zA-Z0-9_.\-:]+\s+)+)([\s\S]+)$/);
+
+          if (multiTokenMatch) {
+            const tokens = multiTokenMatch[1].trim().split(/\s+/);
+            const promptBody = multiTokenMatch[2].replace(/\s*\n\s*/g, ' ').trim();
+            pre.setAttribute('data-copy-text', promptBody);
+
+            code.textContent = '';
+            tokens.forEach(tok => {
+              const chipSpan = document.createElement('span');
+              chipSpan.className = 'ag-skill-chip';
+              chipSpan.setAttribute('data-cmd', tok);
+              chipSpan.setAttribute('data-kbd', 'Tab ⇥');
+              chipSpan.setAttribute('title', '복사되지 않는 칩입니다. 입력창에 ' + tok + ' 타이핑 후 Tab 키를 눌러주세요.');
+              code.appendChild(chipSpan);
+            });
+            const bodySpan = document.createElement('span');
+            bodySpan.textContent = promptBody;
+            code.appendChild(bodySpan);
+
+            const headerChips = tokens.map(tok => `<span class="ag-header-chip">${tok}</span>`).join(' ');
+            labelHtml = `⌨️ 입력창에 ${headerChips} <span class="ag-header-kbd">Tab ⇥</span> 선택 ➔ 뒷문장 복붙`;
+            btnTxt = '뒷문장만 복사';
+          } else {
+            const joined = rawPrompt.replace(/\s*\n\s*/g, ' ').trim();
+            code.textContent = joined;
+            pre.setAttribute('data-copy-text', joined);
+          }
+        }
+
+        header.innerHTML = `
+          <span>${labelHtml}</span>
+          <button class="code-copy-btn" onclick="copyBlock(this)">📋 ${btnTxt}</button>
+        `;
+        pre.parentNode.insertBefore(wrapper, pre);
+        wrapper.appendChild(header);
+        wrapper.appendChild(pre);
+
+        if (isScript && window.hljs && code) hljs.highlightElement(code);
+      });
+    }
+
+    function copyBlock(btn) {
+      const pre = btn.closest('.code-block-wrapper').querySelector('pre');
+      const textToCopy = pre.getAttribute('data-copy-text') || pre.innerText.trim();
+      navigator.clipboard.writeText(textToCopy);
+      const orig = btn.innerHTML;
+      btn.classList.add('copied');
+      btn.innerHTML = '✅ 복사 완료!';
+      setTimeout(() => { btn.classList.remove('copied'); btn.innerHTML = orig; }, 1800);
+    }
+
+    function enhanceScreenshots(container) {
+      container.querySelectorAll('img').forEach(img => {
+        const alt = img.getAttribute('alt') || '실습 화면 가이드';
+        const src = img.getAttribute('src');
+        const fig = document.createElement('div');
+        fig.className = 'screenshot-figure';
+        const pPart = img.closest('[data-part]');
+        if (pPart) fig.setAttribute('data-part', pPart.getAttribute('data-part'));
+
+        fig.innerHTML = `
+          <div class="screenshot-frame" onclick="openLightbox('${src}')">
+            <img src="${src}" alt="${alt}" loading="lazy">
+            <span class="zoom-hint">🔍 클릭하여 크게 보기</span>
+          </div>
+          <div class="screenshot-caption">👆 ${alt}</div>
+        `;
+        const parentP = img.parentElement;
+        if (parentP && parentP.tagName === 'P' && parentP.childNodes.length === 1) {
+          parentP.replaceWith(fig);
+        } else {
+          img.replaceWith(fig);
+        }
+      });
+    }
+
+    function openLightbox(src) {
+      document.getElementById('lightbox-img').src = src;
+      document.getElementById('lightbox').classList.add('open');
+    }
+
+    function buildToc() {
+      const toc = document.getElementById('toc-container');
+      toc.innerHTML = '';
+
+      const introGroup = document.createElement('div');
+      introGroup.className = 'toc-group-label';
+      introGroup.textContent = '🗺️ 개요 & 파일';
+      toc.appendChild(introGroup);
+
+      allSections = Array.from(document.querySelectorAll('#markdown-container h1, #markdown-container h2, #markdown-container h3'));
+
+      allSections.forEach(h => {
+        const shortLabel = h.getAttribute('data-short-label') || h.textContent.trim();
+        if (h.tagName === 'H1') {
+          const groupDiv = document.createElement('div');
+          groupDiv.className = 'toc-group-label';
+          groupDiv.textContent = shortLabel;
+          groupDiv.onclick = () => { h.scrollIntoView({ behavior: 'smooth' }); };
+          toc.appendChild(groupDiv);
+          return;
+        }
+
+        const a = document.createElement('a');
+        a.href = '#' + h.id;
+        a.className = 'toc-link';
+        a.setAttribute('data-part', h.getAttribute('data-part') || 'all');
+        a.textContent = shortLabel;
+        a.title = shortLabel;
+        toc.appendChild(a);
+      });
+    }
+
+    function filterToc(q) {
+      const query = q.toLowerCase();
+      document.querySelectorAll('.toc-link').forEach(a => {
+        a.style.display = a.textContent.toLowerCase().includes(query) ? 'flex' : 'none';
+      });
+    }
+
+    function filterPart(partId, btn) {
+      document.querySelectorAll('.part-tab').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+
+      document.querySelectorAll('#markdown-container > [data-part]').forEach(el => {
+        if (partId === 'all' || el.getAttribute('data-part') === partId || (partId === 'part-0' && el.getAttribute('data-part') === 'intro')) {
+          el.style.display = '';
+        } else {
+          el.style.display = 'none';
+        }
+      });
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function updateActiveToc() {
+      let currentId = '';
+      allSections.forEach(h => {
+        if (h.offsetParent !== null && window.scrollY >= h.offsetTop - 160) {
+          currentId = h.id;
+        }
+      });
+      document.querySelectorAll('.toc-link').forEach(a => {
+        a.classList.toggle('active', a.getAttribute('href') === '#' + currentId);
+      });
+    }
+
+    initPortal();
+  </script>
+</body>
+</html>
