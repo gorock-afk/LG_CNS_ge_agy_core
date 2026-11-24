@@ -11,7 +11,7 @@
 | :--- | :---: | :--- | :--- |
 | **Part 0** | 10분 / 15분 | 환경 세팅 · 무중단 조향 · Gateway | 기업 계정 로그인(앱·CLI·VS Code), `Turbo`, `/btw`, 사내 보안 정책 |
 | **Part 1** | 25분 / 45분 | 설계 질문 ~ 터미널 자율 점검 | 사내 예약 서비스를 `/grill-me` ➔ `/plan` ➔ `/goal` 자동 테스트로 완성 |
-| **Part 2** | 25분 / 50분 | 3종 주력 모델(`Hydrogen · Neon · Carbon`) 비교 | 한 줄 3D 비교 + 선착순 중복 방지 · 서버 호출 꼬임 · 결제 오류 수정 |
+| **Part 2** | 25분 / 50분 | 3종 모델(`Hydrogen · Neon · Opus 5.5`) 비교 | 한 줄 3D 비교 + 선착순 중복 방지 · 서버 호출 꼬임 · 결제 오류 수정 |
 | **Part 3** | 15분 / 35분 | 멀티에이전트 분업 · 팀 자산화 | `/boost` 교차 검증, `/teamwork` 파일 분담 구현, `/learn` · `/plugin` |
 | **Part 4** | 10분 / 20분 | Hook & MCP 프롬프트 세팅 | 위험 명령어(`rm -rf`, `DROP TABLE`) 자동 차단 Hook, 로컬 상태 조회 MCP 연결 |
 | **Part 5** | 5분 / 15분 | Gemini 데스크탑 앱 미리보기 | 코딩(Antigravity) vs 일상 업무(Gemini 데스크탑), 전사 `Skill` 공유 |
@@ -33,7 +33,7 @@ mkdir -p ~/lgcns-agy-lab && cd ~/lgcns-agy-lab && git init
 1️⃣ 첫 화면에서 회색 **`Use Business Account`** 버튼을 클릭합니다. (`Continue with Google` 클릭 금지)
 ![Step 0-1-1 Use Business Account 선택](assets/screenshots/agy_login_step1_business.png)
 
-2️⃣ 다음 화면에서 파란색 **`Continue with Google Cloud`**를 눌러 인증을 완료하고, 우측 하단 모델 선택창에 **`Gemini 4 Carbon` · `Neon` · `Hydrogen`**이 모두 보이는지 확인합니다. (`Antigravity 앱`, 터미널 `agy` CLI, `VS Code 확장` 모두 동일)
+2️⃣ 다음 화면에서 파란색 **`Continue with Google Cloud`**를 눌러 인증을 완료하고, 우측 하단 모델 선택창에 **`Gemini 4 Hydrogen` · `Neon` · `Claude Opus 5.5`**가 모두 보이는지 확인합니다. (`Antigravity 앱`, 터미널 `agy` CLI, `VS Code 확장` 모두 동일)
 ![Step 0-1-2 Continue with Google Cloud 클릭](assets/screenshots/agy_login_step2_gcloud.png)
 
 ---
@@ -103,18 +103,18 @@ mkdir -p ~/lgcns-agy-lab && cd ~/lgcns-agy-lab && git init
 
 ---
 
-# 🧠 Part 2. 주력 3종 모델(`Hydrogen · Neon · Carbon`) 비교 & 실무 과제
+# 🧠 Part 2. 3종 모델(`Hydrogen · Neon · Claude Opus 5.5`) 비교 & 실무 과제
 
-### 🔹 Step 2-1. 3종 모델(`Hydrogen · Neon · Carbon`) 역할 & 한 줄 3D 비교
+### 🔹 Step 2-1. 3종 모델(`Hydrogen · Neon · Claude Opus 5.5`) 역할 & 한 줄 3D 비교
 
 | 모델 라인업 | 실습 활용 비중 · 역할 | 언제 골라 쓰나? |
 | :--- | :--- | :--- |
-| **Gemini 4 Carbon** | **[심층 설계 · 해결사]** 1M 컨텍스트 · 최고 추론 | 원인을 알기 어려운 동시성·보안 문제, 여러 파일 대규모 리팩토링, 정교한 3D 구현 |
-| **Gemini 4 Neon** | **[신규 추가 · 올라운드 주력]** 속도·완성도 균형 | 중대형 신규 기능 구현, 여러 모듈 연결, 까다로운 오류 수정의 기본 주력 |
+| **Gemini 4 Neon** | **[신규 추가 · 올라운드 주력]** 속도·완성도·설계 균형 | 중대형 신규 기능 구현, 여러 모듈 연결, 동시성·보안 등 까다로운 오류 수정 주력 |
 | **Gemini 4 Hydrogen** | **[고속 반복 코딩]** 빠른 응답 · 가벼운 루프 | 평소 API·화면 스캐폴딩, 테스트 코드 보강, 빠른 반복 수정 루프 |
+| **Claude Opus 5.5** | **[타사 플래그십 비교군]** 단일 환경 내 직접 비교 | 별도 CLI 설치 없이 Antigravity 안에서 `Hydrogen · Neon`과 속도·토큰·완성도 교차 비교 |
 | *(참고) Gemini 4 Gluon* | *초경량 · 대량 단순 처리* | *단순 포맷 변환, 반복 템플릿 생성, 짧은 요약* |
 
-1️⃣ 새 대화창 **세 개**를 열어 각각 **`Hydrogen`** · **`Neon`** · **`Carbon`**으로 맞춘 뒤(가장 깊게 생각하는 `Carbon`부터 먼저 전송!), 똑같은 한 줄 문장을 보내 **응답 속도 · 충돌 회피 디테일 · 화면 완성도** 3단 차이를 눈으로 비교합니다.
+1️⃣ 새 대화창 **세 개**를 열어 각각 **`Hydrogen`** · **`Neon`** · **`Claude Opus 5.5`**로 맞춘 뒤, 똑같은 한 줄 문장을 보내 **응답 속도 · 충돌 회피 디테일 · 소모 토큰 대비 화면 완성도** 3단 차이를 눈으로 비교합니다.
 
 ```text
 HTML 파일 하나로 물류 창고에서 로봇 여러 대가 서로 부딪히지 않고 선반 박스를 출고장까지 나르는 3D 화면을 만들어줘.
@@ -124,9 +124,9 @@ HTML 파일 하나로 물류 창고에서 로봇 여러 대가 서로 부딪히�
 
 ---
 
-### 🔹 Step 2-2. `Hydrogen · Neon · Carbon`을 바꿔가며 풀어보는 현업 과제 3선
+### 🔹 Step 2-2. `Hydrogen · Neon · Claude Opus 5.5`를 바꿔가며 풀어보는 현업 과제 3선
 
-> **핵심:** 아래 3가지 실무 문제를 **`Hydrogen` ➔ `Neon` ➔ `Carbon`** 순서로(또는 과제별로 모델을 나눠) 돌려보면, 단순 속도전과 복합 설계·예외 방어에서 각 모델이 어떻게 다른지 바로 감이 잡힙니다.
+> **핵심:** 아래 3가지 실무 문제를 **`Hydrogen` · `Neon` · `Claude Opus 5.5`**로 바꿔가며 돌려보면, 빠른 반복 구현부터 까다로운 예외 방어까지 모델별 성향과 `Neon`의 실무 가성비가 바로 체감됩니다.
 
 1️⃣ **[과제 A — 선착순 이벤트 동시 신청 시 수량 초과 막기 (`Hydrogen` vs `Neon` 추천)]**
 
@@ -134,13 +134,13 @@ HTML 파일 하나로 물류 창고에서 로봇 여러 대가 서로 부딪히�
 선착순 쿠폰 100장에 사람 500명이 동시에 몰릴 때 100장 넘게 발급되는 버그 상황을 파이썬으로 먼저 재현하고, 딱 100장만 정확히 나가도록 고쳐서 테스트로 증명해줘.
 ```
 
-2️⃣ **[과제 B — 사내 서버 간 무한 호출 & 먹통 주의 구간 찾기 (`Neon` vs `Carbon` 추천)]**
+2️⃣ **[과제 B — 사내 서버 간 무한 호출 & 먹통 주의 구간 찾기 (`Neon` vs `Claude Opus 5.5` 추천)]**
 
 ```text
 사내 서비스 20개가 서로 API를 부르는 샘플 구조를 만들고, 어디서 서로 무한 호출이 도는지랑 어느 서버 하나가 죽으면 전체가 멈추는지 한눈에 보여주는 화면을 만들어줘.
 ```
 
-3️⃣ **[과제 C — 오래된 결제 코드의 금액 오차 & 검색창 보안 구멍 메우기 (`Neon` vs `Carbon` 추천)]**
+3️⃣ **[과제 C — 오래된 결제 코드의 금액 오차 & 검색창 보안 구멍 메우기 (`Neon` vs `Claude Opus 5.5` 추천)]**
 
 ```text
 소수점 수수료 계산 오차랑 검색창 해킹 위험이 들어있는 샘플 정산 코드와 테스트를 먼저 만든 다음, 테스트 코드는 건드리지 말고 정산 코드만 안전하게 고쳐서 통과시켜줘.
@@ -156,8 +156,8 @@ HTML 파일 하나로 물류 창고에서 로봇 여러 대가 서로 부딪히�
 wc -l *.py *.html
 ```
 
-2️⃣ **현업 3단 모델 운용 공식 & Zero Harness Tax**:
-- **평소 빠른 코딩(`Hydrogen`) ➔ 기능 구현·통합 주력(`Neon`) ➔ 고난도 설계·난제 해결(`Carbon`)** 순으로 작업 난이도에 맞춰 전환하면 속도와 쿼터 효율을 모두 잡을 수 있습니다.
+2️⃣ **현업 모델 운용 공식 & Zero Harness Tax**:
+- **평소 빠른 코딩(`Hydrogen`) ➔ 핵심 기능 구현·복합 버그 해결(`Neon`)**을 기본 주력으로 쓰고, 필요할 때 같은 Antigravity 화면 안에서 **`Claude Opus 5.5`**까지 바로 전환해 비교·검증할 수 있습니다.
 - **Zero Harness Tax**: 주요 코딩 벤치마크(DeepSWE · Terminal-Bench) 기준 전용 CLI 대비 품질 손실 없이 12% 이내 비용 효율을 유지해, 도구 파편화 없이 Antigravity 하나로 표준화합니다.
 
 ---
@@ -209,7 +209,7 @@ wc -l *.py *.html
 | `Slash Commands` | `/grill-me` · `/plan` · `/goal` · `/boost` | 설계 질문부터 자동 테스트 완주·교차검증까지 1줄 호출 |
 | `CLAUDE.md · Rules` | `.agents/rules/` · `AGENTS.md` | 기존 규칙 파일 수정 없이 그대로 인식 + `/learn` 자동 저장 |
 | `Skills · Hooks · Plugin` | `.agents/skills/` · `.agents/hooks.json` | 검증된 스킬과 안전장치를 폴더 하나로 묶어 팀 공유 |
-| 단일 모델 고정 | `Carbon · Neon · Hydrogen · Gluon` | 어려운 설계는 `Carbon`, 평소 개발·수정은 `Hydrogen · Gluon` |
+| 단일 모델 고정 | `Neon · Hydrogen · Gluon (+ Opus 5.5)` | 주력 설계·구현은 `Neon`, 고속 반복 수정은 `Hydrogen`, 교차 비교는 `Opus 5.5` |
 
 ---
 
