@@ -12,7 +12,7 @@
 | **Part 0** | 10분 / 15분 | 환경 세팅 · 무중단 조향 · Gateway | 기업 계정 로그인(앱·CLI·VS Code), `Turbo`, `/btw`, 사내 보안 정책 |
 | **Part 1** | 25분 / 45분 | 설계 질문 ~ 터미널 자율 점검 | 사내 예약 서비스를 `/grill-me` ➔ `/plan` ➔ `/goal` 자동 테스트로 완성 |
 | **Part 2** | 25분 / 50분 | 3종 모델(`Hydrogen · Neon · Opus 5.5`) 비교 | 한 줄 3D 비교 + 선착순 중복 방지 · 서버 호출 꼬임 · 결제 오류 수정 |
-| **Part 3** | 15분 / 35분 | 멀티에이전트 분업 · 팀 자산화 | `/boost` 교차 검증, `/teamwork` 파일 분담 구현, `/learn` · `/plugin` |
+| **Part 3** | 15분 / 35분 | 멀티에이전트 · Global/Project 규칙 | `/boost`, `/teamwork`, 전역(`~/.gemini`) vs 프로젝트(`.md`) 규칙·플러그인 |
 | **Part 4** | 10분 / 20분 | Hook & MCP 프롬프트 세팅 | 위험 명령어(`rm -rf`, `DROP TABLE`) 자동 차단 Hook, 로컬 상태 조회 MCP 연결 |
 | **Part 5** | 5분 / 15분 | Gemini 데스크탑 앱 미리보기 | 코딩(Antigravity) vs 일상 업무(Gemini 데스크탑), 전사 `Skill` 공유 |
 
@@ -186,13 +186,46 @@ wc -l *.py *.html
 
 ---
 
-### 🔹 Step 3-2. `/learn` · `/plugin` 팀 규칙 저장 & Claude Code 전환 매핑
+### 🔹 Step 3-2. Global vs Project 규칙(`.md`) 구분 & `/learn` · `/plugin` 팀 자산화
 
-1️⃣ **`/learn`으로 매번 말하기 귀찮은 팀 규칙 영구 저장** (`.agents/rules/` 자동 생성):
+> **핵심:** 매번 프롬프트에 똑같은 주의사항을 복붙하지 않도록, **내 PC 모든 작업에 공통으로 쓸 개인·기본 규칙(`Global`)**과 **이 저장소·하위 폴더에만 적용할 팀 규칙(`Project`)**을 `.md` 파일 위치로 깔끔하게 나눕니다. (충돌 시 **`Project > Global`** 우선 적용)
+
+| 구분 | 파일 경로 (`.md`) | 적용 범위 · 공유 방식 | 현업에서 주로 적는 내용 |
+| :--- | :--- | :--- | :--- |
+| **Global Rules (전역)** | `~/.gemini/config/rules/*.md` | 내 PC 모든 프로젝트 공통 (Git 제외) | 한국어 응답, 간결한 설명 스타일, 비밀키 노출 금지 등 개인 기본 수칙 |
+| **Project Rules (프로젝트)** | `<루트>/AGENTS.md` · `.agents/rules/*.md` | 현재 저장소 한정 (Git으로 팀 공유) | 정산은 `Decimal` 사용, DB 바인딩 강제, 테스트 파일 임의 수정 금지 |
+| **Directory Rules (하위 폴더)** | `backend/AGENTS.md` · `frontend/AGENTS.md` | 해당 하위 폴더 작업 시에만 자동 활성 | 백엔드 전용 API 예외 규격, 프론트엔드 전용 컴포넌트·스타일 규칙 |
+
+- **`rules/*.md` 상단 활성화 옵션(`trigger`)**: 항상 켜둘 핵심 원칙만 **`trigger: always_on`**으로 두고, 특정 작업에만 필요한 가이드는 **`trigger: model_decision`**(`description` 함께 기재)으로 두면 평소 토큰 소모를 아낄 수 있습니다. (`AGENTS.md` / `GEMINI.md`는 별도 설정 없이 해당 폴더에서 항상 적용됩니다.)
+
+1️⃣ **`/learn`으로 현재 프로젝트 전용 규칙(`.agents/rules/*.md`) 자동 생성**:
 
 ```text
-/learn 돈이나 수수료를 계산할 때는 float 대신 Decimal을 쓰고 DB 조회문은 항상 바인딩 방식을 쓴다는 내용을 프로젝트 규칙으로 저장해줘.
+/learn 돈이나 수수료를 계산할 때는 float 대신 Decimal을 쓰고 DB 조회문은 항상 바인딩 방식을 쓴다는 내용을 이 프로젝트 규칙으로 저장해줘.
 ```
+
+<details class="file-list-details">
+<summary><strong>📄 생성된 프로젝트 규칙(`.agents/rules/*.md`) vs 전역 규칙(`~/.gemini/config/rules/*.md`) 예시 보기</strong></summary>
+
+```markdown
+# [프로젝트 전용] .agents/rules/payment-safety.md  (Git 커밋 → 팀원 전원 적용)
+---
+trigger: always_on
+description: 정산 금액 및 DB 쿼리 안전 수칙
+---
+- 금액·수수료 계산에는 float 대신 반드시 Decimal을 사용한다.
+- 모든 SQL 조회는 파라미터 바인딩 방식으로 작성한다.
+
+# [내 PC 전역] ~/.gemini/config/rules/my-style.md  (내 PC의 모든 프로젝트 공통 적용)
+---
+trigger: always_on
+description: 개인 공통 응답 및 커밋 규칙
+---
+- 설명은 핵심 결론부터 한국어로 간결하게 작성한다.
+- 코드에 API 키나 비밀번호를 직접 적지 않고 환경변수로 읽는다.
+```
+
+</details>
 
 2️⃣ **`/plugin`으로 동료에게 바로 줄 수 있게 묶기**:
 
@@ -207,7 +240,7 @@ wc -l *.py *.html
 | 기존 개념 | Antigravity 대응 | 현장 전환 포인트 |
 | :--- | :--- | :--- |
 | `Slash Commands` | `/grill-me` · `/plan` · `/goal` · `/boost` | 설계 질문부터 자동 테스트 완주·교차검증까지 1줄 호출 |
-| `CLAUDE.md · Rules` | `.agents/rules/` · `AGENTS.md` | 기존 규칙 파일 수정 없이 그대로 인식 + `/learn` 자동 저장 |
+| `Global / Project CLAUDE.md` | `~/.gemini/config/rules/*.md` · `AGENTS.md` · `.agents/rules/*.md` | 전역·프로젝트·하위 폴더 계층 그대로 대응 (`Project > Global`) + `/learn` 자동 저장 |
 | `Skills · Hooks · Plugin` | `.agents/skills/` · `.agents/hooks.json` | 검증된 스킬과 안전장치를 폴더 하나로 묶어 팀 공유 |
 | 단일 모델 고정 | `Neon · Hydrogen · Gluon (+ Opus 5.5)` | 주력 설계·구현은 `Neon`, 고속 반복 수정은 `Hydrogen`, 교차 비교는 `Opus 5.5` |
 
