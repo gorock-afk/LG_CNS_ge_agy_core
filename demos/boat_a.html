@@ -1,0 +1,1131 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Sunset Wave Rider</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#1a0f1f;}
+  canvas{display:block;}
+  #hud{position:fixed;top:14px;left:16px;font:600 12px/1.6 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+       color:rgba(255,255,255,.9);letter-spacing:.08em;text-shadow:0 1px 3px rgba(0,0,0,.5);pointer-events:none;user-select:none}
+  #hud .k{opacity:.6;margin-right:.7em}
+  #hud b{display:inline-block;font-weight:700;transition:transform .15s,color .15s;transform-origin:left center}
+  #hud b.pop{transform:scale(1.3);color:#ffe08a}
+  #hud b.neg{color:#ff8a80}
+  #hint{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);font:500 12px system-ui,sans-serif;
+        color:rgba(255,255,255,.78);letter-spacing:.05em;text-shadow:0 1px 3px rgba(0,0,0,.6);transition:opacity 1.2s;pointer-events:none;white-space:nowrap}
+  #flash{position:fixed;inset:0;pointer-events:none;box-shadow:inset 0 0 180px 50px rgba(255,40,40,.6);opacity:0;transition:opacity .45s}
+</style>
+<script type="importmap">{"imports":{"three":"https://unpkg.com/three@0.160.0/build/three.module.js"}}</script>
+</head>
+<body>
+<div id="hud">
+  <div><span class="k">SCORE</span><b id="score">0</b></div>
+  <div><span class="k">SPEED</span><b id="speed">0</b> kn</div>
+</div>
+<div id="hint">W / ↑ 가속 · S / ↓ 감속 · A D / ← → 조향 · 코인과 부표 게이트 통과, 암초 회피</div>
+<div id="flash"></div>
+
+<script type="module">
+import * as THREE from 'three';
+
+/* ============================================================
+   Renderer / Scene / Camera
+   ============================================================ */
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;
+document.body.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.fog = new THREE.Fog(new THREE.Color(0xf59a68), 220, 850);
+const camera = new THREE.PerspectiveCamera(60, innerWidth / innerHeight, 0.1, 6000);
+
+const SUN = new THREE.Vector3(-0.42, 0.055, -1).normalize();
+const U = {
+  time: { value: 0 },
+  sun: { value: SUN },
+  center: { value: new THREE.Vector3() },
+};
+
+/* ============================================================
+   Wave model (identical on CPU and GPU)
+   ============================================================ */
+const SHARP = 1.6;
+const WAVES = [
+  [0.35, 64, 0.95, 0.0],
+  [-0.6, 38, 0.55, 1.3],
+  [1.2, 23, 0.32, 2.1],
+  [2.25, 14, 0.17, 0.7],
+  [-1.75, 9, 0.09, 4.0],
+].map(([a, len, amp, ph]) => {
+  const k = 2 * Math.PI / len;
+  return { dx: Math.cos(a), dz: Math.sin(a), k, amp, w: Math.sqrt(9.81 * k) * 0.85, ph, small: len < 16 ? 1 : 0 };
+});
+let T = 0;
+const smooth = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+function waveH(x, z, t = T) {
+  const c = U.center.value;
+  const d = Math.hypot(x - c.x, z - c.z);
+  const fAll = 1 - smooth(400, 900, d), fSmall = 1 - smooth(90, 170, d);
+  let h = 0;
+  for (const w of WAVES) {
+    const s = Math.sin(w.k * (w.dx * x + w.dz * z) - w.w * t + w.ph);
+    h += w.amp * (w.small ? fSmall : 1) * (2 * Math.pow((s + 1) * 0.5, SHARP) - 1);
+  }
+  return h * fAll;
+}
+
+/* ============================================================
+   Shared GLSL
+   ============================================================ */
+const GLSL_NOISE = /* glsl */`
+float hash(vec2 p){ vec3 p3 = fract(vec3(p.xyx)*0.1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x+p3.y)*p3.z); }
+float noise(vec2 p){ vec2 i=floor(p), f=fract(p); vec2 u=f*f*(3.-2.*f);
+  return mix(mix(hash(i),hash(i+vec2(1,0)),u.x), mix(hash(i+vec2(0,1)),hash(i+vec2(1,1)),u.x), u.y); }
+float fbm(vec2 p){ float v=0., a=.5; mat2 m=mat2(1.6,1.2,-1.2,1.6); for(int i=0;i<4;i++){ v+=a*noise(p); p=m*p; a*=.5; } return v; }
+float rnoise(vec2 p){ return noise(p)*0.65 + noise(p*2.3+5.1)*0.35; }
+`;
+const GLSL_WAVE = /* glsl */`
+#define NW 5
+#define SHARP ${SHARP.toFixed(2)}
+uniform vec4 uW[NW];
+uniform vec3 uW2[NW];
+uniform float uTime;
+uniform vec3 uCenter;
+vec3 waveSample(vec2 p){
+  float d = length(p - uCenter.xz);
+  float fa = 1. - smoothstep(400., 900., d);
+  float fs = 1. - smoothstep(90., 170., d);
+  vec3 r = vec3(0.);
+  for(int i=0;i<NW;i++){
+    vec4 w = uW[i]; vec3 w2 = uW2[i];
+    float f = fa * mix(1., fs, w2.z);
+    float ph = w.z*dot(w.xy, p) - w2.x*uTime + w2.y;
+    float s = sin(ph), c = cos(ph);
+    float b = max((s+1.)*.5, 1e-4);
+    r.x += w.w*f*(2.*pow(b, SHARP) - 1.);
+    float dd = w.w*f*SHARP*pow(b, SHARP-1.)*c*w.z;
+    r.y += dd*w.x; r.z += dd*w.y;
+  }
+  return r;
+}
+`;
+const GLSL_SKY = /* glsl */`
+uniform vec3 uSun;
+vec3 s2l(vec3 c){ return pow(c, vec3(2.2)); }
+vec3 skyColor(vec3 d){
+  float y = max(d.y, 0.0);
+  float sa = max(dot(d, uSun), 0.0);
+  vec3 hor = s2l(vec3(1.00, 0.57, 0.33));
+  vec3 low = s2l(vec3(0.94, 0.43, 0.40));
+  vec3 mid = s2l(vec3(0.52, 0.31, 0.50));
+  vec3 zen = s2l(vec3(0.12, 0.13, 0.32));
+  vec3 c = mix(hor, low, smoothstep(0.0, 0.06, y));
+  c = mix(c, mid, smoothstep(0.04, 0.24, y));
+  c = mix(c, zen, smoothstep(0.20, 0.80, y));
+  vec3 dh = normalize(vec3(d.x, 0.0, d.z) + vec3(1e-5));
+  float az = max(dot(dh, normalize(vec3(uSun.x, 0.0, uSun.z))), 0.0);
+  c += s2l(vec3(1.0, 0.55, 0.25)) * pow(az, 6.) * (1. - smoothstep(0., 0.35, y)) * 0.9;
+  c += s2l(vec3(1.0, 0.75, 0.45)) * pow(sa, 40.) * 1.2;
+  c += vec3(1.0, 0.8, 0.55) * pow(sa, 600.) * 3.0;
+  return c;
+}
+vec3 sunDisk(vec3 d){ float sa = dot(d, uSun); return vec3(1.0, 0.82, 0.55) * smoothstep(0.99955, 0.99978, sa) * 14.; }
+`;
+
+/* ============================================================
+   Sky dome (gradient + sun + procedural clouds)
+   ============================================================ */
+const skyMat = new THREE.ShaderMaterial({
+  side: THREE.BackSide, depthWrite: false, fog: false,
+  uniforms: { uSun: U.sun, uTime: U.time },
+  vertexShader: /* glsl */`
+    varying vec3 vDir;
+    void main(){ vDir = position; vec4 p = modelViewMatrix*vec4(position,1.); gl_Position = projectionMatrix*p; }`,
+  fragmentShader: /* glsl */`
+    uniform float uTime;
+    varying vec3 vDir;
+    ${GLSL_NOISE}
+    ${GLSL_SKY}
+    void main(){
+      vec3 d = normalize(vDir);
+      vec3 col = skyColor(d) + sunDisk(d);
+      if(d.y > 0.0){
+        vec2 uv = d.xz / (d.y + 0.12);
+        float n = fbm(uv*vec2(0.8, 2.6) + vec2(uTime*0.004, 0.));
+        float n2 = fbm(uv*3.1 + 7.3);
+        float cl = smoothstep(0.52, 0.80, n*0.85 + n2*0.3) * smoothstep(0.012, 0.11, d.y) * (1. - smoothstep(0.45, 0.9, d.y));
+        float sa = max(dot(d, uSun), 0.);
+        vec3 dark = s2l(vec3(0.38, 0.22, 0.36));
+        vec3 lit  = s2l(vec3(1.0, 0.62, 0.42));
+        vec3 cc = mix(dark, lit, clamp(pow(sa, 4.)*0.9 + 0.2*(1.-n2), 0., 1.));
+        cc += s2l(vec3(1.0, 0.72, 0.42)) * pow(sa, 30.) * 1.6;
+        col = mix(col, cc, cl*0.85);
+      } else {
+        col = mix(col, s2l(vec3(0.10, 0.08, 0.14)), smoothstep(0.0, 0.08, -d.y));
+      }
+      gl_FragColor = vec4(col, 1.);
+      #include <tonemapping_fragment>
+      #include <colorspace_fragment>
+    }`,
+});
+const skyGeo = new THREE.SphereGeometry(2500, 64, 32);
+const sky = new THREE.Mesh(skyGeo, skyMat);
+sky.renderOrder = -1;
+scene.add(sky);
+
+// Procedural environment map from the sky (for metallic coins / boat reflections)
+{
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  const envScene = new THREE.Scene();
+  envScene.add(new THREE.Mesh(skyGeo, skyMat));
+  scene.environment = pmrem.fromScene(envScene, 0.03, 1, 6000).texture;
+}
+
+scene.add(new THREE.HemisphereLight(0x8a6fb0, 0x1a1420, 0.75));
+const sunLight = new THREE.DirectionalLight(0xffa36b, 2.4);
+sunLight.position.copy(SUN).multiplyScalar(100);
+scene.add(sunLight);
+
+/* ============================================================
+   Ocean (radial LOD mesh that follows the boat)
+   ============================================================ */
+const MAX_OBS = 40;
+const oceanUniforms = {
+  uTime: U.time, uSun: U.sun, uCenter: U.center,
+  uW: { value: WAVES.map(w => new THREE.Vector4(w.dx, w.dz, w.k, w.amp)) },
+  uW2: { value: WAVES.map(w => new THREE.Vector3(w.w, w.ph, w.small)) },
+  uObs: { value: Array.from({ length: MAX_OBS }, () => new THREE.Vector4()) },
+  uObsN: { value: 0 },
+  uBoat: { value: new THREE.Vector4() },
+  uBoatFoam: { value: 0 },
+};
+function buildOceanGeometry() {
+  const radii = [0];
+  let r = 0, step = 0.4;
+  for (let i = 0; i < 100; i++) { r += step; radii.push(r); }
+  while (r < 1600) { step *= 1.025; r += step; radii.push(r); }
+  const SEG = 384;
+  const pos = new Float32Array((1 + (radii.length - 1) * SEG) * 3);
+  let p = 3;
+  for (let i = 1; i < radii.length; i++) {
+    for (let j = 0; j < SEG; j++) {
+      const a = j / SEG * Math.PI * 2;
+      pos[p++] = Math.cos(a) * radii[i]; pos[p++] = 0; pos[p++] = Math.sin(a) * radii[i];
+    }
+  }
+  const idx = [];
+  for (let j = 0; j < SEG; j++) idx.push(0, 1 + ((j + 1) % SEG), 1 + j);
+  for (let i = 1; i < radii.length - 1; i++) {
+    const a0 = 1 + (i - 1) * SEG, a1 = 1 + i * SEG;
+    for (let j = 0; j < SEG; j++) {
+      const j1 = (j + 1) % SEG;
+      idx.push(a0 + j, a0 + j1, a1 + j, a0 + j1, a1 + j1, a1 + j);
+    }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  g.setIndex(idx);
+  return g;
+}
+const oceanMat = new THREE.ShaderMaterial({
+  uniforms: oceanUniforms,
+  vertexShader: /* glsl */`
+    ${GLSL_WAVE}
+    varying vec3 vWorld; varying float vH;
+    void main(){
+      vec2 p = position.xz + uCenter.xz;
+      vec3 w = waveSample(p);
+      vWorld = vec3(p.x, w.x, p.y);
+      vH = w.x;
+      gl_Position = projectionMatrix * viewMatrix * vec4(vWorld, 1.);
+    }`,
+  fragmentShader: /* glsl */`
+    ${GLSL_NOISE}
+    ${GLSL_WAVE}
+    ${GLSL_SKY}
+    uniform vec4 uObs[${MAX_OBS}];
+    uniform int uObsN;
+    uniform vec4 uBoat;
+    uniform float uBoatFoam;
+    varying vec3 vWorld; varying float vH;
+    void main(){
+      vec3 ws = waveSample(vWorld.xz);
+      vec3 N = normalize(vec3(-ws.y, 1., -ws.z));
+      vec3 toCam = cameraPosition - vWorld;
+      float dist = length(toCam);
+      vec3 V = toCam / dist;
+
+      // small wind ripples (normal detail) -> sun glitter
+      float rs = mix(1.0, 0.45, smoothstep(20., 300., dist));
+      float e = 0.12;
+      vec2 rp = vWorld.xz*0.7;  vec2 t1 = vec2(uTime*0.35, uTime*0.22);
+      float n0 = rnoise(rp+t1), nx = rnoise(rp+vec2(e,0.)+t1), nz = rnoise(rp+vec2(0.,e)+t1);
+      vec2 rp2 = vWorld.xz*2.1; vec2 t2 = vec2(-uTime*0.6, uTime*0.45);
+      float m0 = noise(rp2+t2), mx = noise(rp2+vec2(e,0.)+t2), mz = noise(rp2+vec2(0.,e)+t2);
+      vec3 rn = vec3(-(nx-n0)/e*0.7 - (mx-m0)/e*0.25, 0., -(nz-n0)/e*0.7 - (mz-m0)/e*0.25);
+      N = normalize(N + rn*0.22*rs);
+
+      // water body
+      float ndl = max(dot(N, uSun), 0.);
+      vec3 deep = s2l(vec3(0.06, 0.10, 0.17));
+      vec3 shallow = s2l(vec3(0.12, 0.27, 0.32));
+      vec3 water = mix(deep, shallow, clamp(vH*0.35 + 0.35, 0., 1.));
+      water *= 0.6 + 0.8*ndl;
+      water += s2l(vec3(0.85, 0.45, 0.30)) * 0.04;
+      vec2 vh = normalize(-V.xz + vec2(1e-5));
+      float sss = pow(max(dot(vh, normalize(uSun.xz)), 0.), 5.) * smoothstep(0., 2., vH + 0.6);
+      water += s2l(vec3(0.25, 0.60, 0.48)) * sss * 0.35;
+
+      // reflection + fresnel + sun specular
+      float fres = 0.02 + 0.98*pow(1. - max(dot(N, V), 0.), 5.);
+      vec3 R = reflect(-V, N); R.y = abs(R.y);
+      vec3 col = mix(water, skyColor(R), fres);
+      float rl = max(dot(R, uSun), 0.);
+      col += vec3(1.0, 0.72, 0.42) * (pow(rl, 900.)*40. + pow(rl, 120.)*1.2 + pow(rl, 12.)*0.08);
+
+      // foam: crests, rocks/buoys, boat hull
+      float fn = fbm(vWorld.xz*0.35 + vec2(uTime*0.05, 0.));
+      float foam = smoothstep(1.15, 1.9, vH + (fn - 0.5)*1.2) * 0.8;
+      for(int i=0;i<${MAX_OBS};i++){
+        if(i >= uObsN) break;
+        vec4 o = uObs[i];
+        float dd = length(vWorld.xz - o.xy) - o.z;
+        float band = 1. - smoothstep(0., o.w, dd);
+        float pulse = 0.55 + 0.45*sin(dd*2.2 - uTime*2.5 + fn*6.);
+        foam += band * pulse * (0.45 + fn) * step(-0.6, dd);
+      }
+      vec2 bd = vWorld.xz - uBoat.xy;
+      vec2 bf = vec2(sin(uBoat.z), cos(uBoat.z));
+      float lf = dot(bd, bf), ll = dot(bd, vec2(bf.y, -bf.x));
+      float be = length(vec2(ll/1.25, (lf - 0.3)/2.7));
+      foam += (1. - smoothstep(0.85, 1.6, be)) * uBoatFoam * (0.5 + fn);
+      foam = clamp(foam, 0., 1.);
+      vec3 foamCol = s2l(vec3(1.0, 0.9, 0.86)) * (0.55 + 0.45*max(dot(N, uSun), 0.) + 0.25);
+      col = mix(col, foamCol, foam*0.9);
+
+      // atmospheric fade into the horizon
+      float fd = length(vWorld.xz - cameraPosition.xz);
+      vec3 hd = normalize(vec3(vWorld.x - cameraPosition.x, 0.0, vWorld.z - cameraPosition.z) + vec3(1e-5));
+      col = mix(col, skyColor(hd), smoothstep(220., 1000., fd));
+
+      gl_FragColor = vec4(col, 1.);
+      #include <tonemapping_fragment>
+      #include <colorspace_fragment>
+    }`,
+});
+const ocean = new THREE.Mesh(buildOceanGeometry(), oceanMat);
+ocean.frustumCulled = false;
+scene.add(ocean);
+
+/* ============================================================
+   Procedural helpers
+   ============================================================ */
+const C = hex => new THREE.Color(hex);
+function paint(geo, color) {
+  const n = geo.attributes.position.count, a = new Float32Array(n * 3);
+  for (let i = 0; i < n; i++) { a[i * 3] = color.r; a[i * 3 + 1] = color.g; a[i * 3 + 2] = color.b; }
+  geo.setAttribute('color', new THREE.BufferAttribute(a, 3));
+  return geo;
+}
+function hash3(x, y, z) { const h = Math.sin(x * 127.1 + y * 311.7 + z * 74.7) * 43758.5453; return h - Math.floor(h); }
+function noise3(x, y, z) {
+  const xi = Math.floor(x), yi = Math.floor(y), zi = Math.floor(z);
+  const xf = x - xi, yf = y - yi, zf = z - zi;
+  const u = xf * xf * (3 - 2 * xf), v = yf * yf * (3 - 2 * yf), w = zf * zf * (3 - 2 * zf);
+  const L = (a, b, t) => a + (b - a) * t;
+  const c = (dx, dy, dz) => hash3(xi + dx, yi + dy, zi + dz);
+  return L(L(L(c(0,0,0), c(1,0,0), u), L(c(0,1,0), c(1,1,0), u), v),
+           L(L(c(0,0,1), c(1,0,1), u), L(c(0,1,1), c(1,1,1), u), v), w);
+}
+const fbm3 = (x, y, z) => noise3(x, y, z) * 0.55 + noise3(x * 2.1, y * 2.1, z * 2.1) * 0.3 + noise3(x * 4.3, y * 4.3, z * 4.3) * 0.15;
+function glowTexture(inner, mid) {
+  const c = document.createElement('canvas'); c.width = c.height = 64;
+  const g = c.getContext('2d');
+  const gr = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+  gr.addColorStop(0, inner); gr.addColorStop(0.3, mid); gr.addColorStop(1, 'rgba(0,0,0,0)');
+  g.fillStyle = gr; g.fillRect(0, 0, 64, 64);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+}
+
+/* ============================================================
+   Boat (procedural hull + console + driver + outboard)
+   ============================================================ */
+function buildBoat() {
+  const g = new THREE.Group();
+  const L = 5.0, N = 28, secs = [];
+  for (let i = 0; i <= N; i++) {
+    const t = i / N, z = -L / 2 + t * L;
+    const bt = Math.max(0, (t - 0.45) / 0.55);
+    let w = 1.05 * Math.sqrt(Math.max(0, 1 - bt * bt)) * (0.93 + 0.07 * Math.min(1, t / 0.25));
+    if (i === N) w = 0;
+    const deck = 0.55 + 0.32 * t * t;
+    const keel = -0.38 + 0.33 * Math.pow(Math.max(0, (t - 0.55) / 0.45), 1.6);
+    const chine = keel + (deck - keel) * 0.3;
+    secs.push([[w, deck, z], [w * 0.86, chine, z], [0, keel, z], [-w * 0.86, chine, z], [-w, deck, z]]);
+  }
+  const P = [], CL = [];
+  const tri = (a, b, c, col) => { P.push(...a, ...b, ...c); for (let k = 0; k < 3; k++) CL.push(col.r, col.g, col.b); };
+  const white = C(0xf3efe6), bottom = C(0xb3282d), teak = C(0x9c6a3c);
+  for (let i = 0; i < N; i++) {
+    for (let j = 0; j < 4; j++) {
+      const a = secs[i][j], b = secs[i][j + 1], c = secs[i + 1][j + 1], d = secs[i + 1][j];
+      const col = (j === 0 || j === 3) ? white : bottom;
+      tri(a, b, c, col); tri(a, c, d, col);
+    }
+    tri(secs[i][0], secs[i][4], secs[i + 1][4], teak);
+    tri(secs[i][0], secs[i + 1][4], secs[i + 1][0], teak);
+  }
+  const s0 = secs[0], ctr = [0, (s0[0][1] + s0[2][1]) / 2, s0[0][2]];
+  for (let j = 0; j < 5; j++) tri(ctr, s0[j], s0[(j + 1) % 5], white);
+  const hullGeo = new THREE.BufferGeometry();
+  hullGeo.setAttribute('position', new THREE.Float32BufferAttribute(P, 3));
+  hullGeo.setAttribute('color', new THREE.Float32BufferAttribute(CL, 3));
+  hullGeo.computeVertexNormals();
+  const hullMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.35, metalness: 0.05, side: THREE.DoubleSide, flatShading: true, envMapIntensity: 0.7 });
+  g.add(new THREE.Mesh(hullGeo, hullMat));
+
+  // rub rails (red accent stripe)
+  const railMat = new THREE.MeshStandardMaterial({ color: 0xd9483a, roughness: 0.4, envMapIntensity: 0.6 });
+  for (const side of [0, 4]) {
+    const pts = secs.map(s => new THREE.Vector3(s[side][0] * 1.01, s[side][1] + 0.02, s[side][2]));
+    g.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 60, 0.04, 6), railMat));
+  }
+
+  const std = (color, rough = 0.6, extra = {}) => new THREE.MeshStandardMaterial({ color, roughness: rough, envMapIntensity: 0.6, ...extra });
+  const box = (w, h, d, mat, x, y, z) => { const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat); m.position.set(x, y, z); g.add(m); return m; };
+
+  // console + windshield
+  box(0.85, 0.6, 0.6, std(0xf3efe6, 0.35), 0, 0.95, 0.35);
+  box(0.86, 0.06, 0.62, std(0x2a2e36, 0.5), 0, 1.27, 0.35);
+  const ws = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 0.42),
+    new THREE.MeshStandardMaterial({ color: 0x223040, roughness: 0.05, metalness: 0.2, transparent: true, opacity: 0.45, side: THREE.DoubleSide, envMapIntensity: 1.4 }));
+  ws.position.set(0, 1.47, 0.6); ws.rotation.x = -0.55; g.add(ws);
+  // seats
+  box(0.9, 0.22, 0.5, std(0xe9dcc3, 0.8), 0, 0.72, -0.75);
+  box(0.9, 0.45, 0.12, std(0xe9dcc3, 0.8), 0, 1.0, -1.0);
+  // steering wheel
+  const wheel = new THREE.Mesh(new THREE.TorusGeometry(0.14, 0.022, 6, 18), std(0x1b1b1b, 0.5));
+  wheel.position.set(0, 1.38, 0.08); wheel.rotation.x = -0.6; g.add(wheel);
+  // driver
+  const driver = new THREE.Group(); driver.position.set(0, 0.62, -0.25); g.add(driver);
+  const legs = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.13, 0.6, 10), std(0x2b3a55, 0.8)); legs.position.y = 0.3; driver.add(legs);
+  const torso = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.18, 0.55, 12), std(0xff7a1a, 0.55)); torso.position.y = 0.85; driver.add(torso);
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.14, 16, 12), std(0xe0ac85, 0.7)); head.position.y = 1.28; driver.add(head);
+  const cap = new THREE.Mesh(new THREE.SphereGeometry(0.15, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2), std(0x1d3557, 0.7)); cap.position.y = 1.31; driver.add(cap);
+  const brim = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 0.02, 12, 1, false, -Math.PI / 2, Math.PI), std(0x1d3557, 0.7)); brim.position.set(0, 1.32, 0.11); driver.add(brim);
+  for (const sx of [-1, 1]) {
+    const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.45, 8), std(0xe0ac85, 0.7));
+    arm.position.set(sx * 0.16, 0.88, 0.17); arm.rotation.x = 1.1; arm.rotation.z = -sx * 0.25; driver.add(arm);
+  }
+  // outboard motor
+  box(0.42, 0.5, 0.48, std(0x222428, 0.35), 0, 0.9, -2.68);
+  box(0.43, 0.06, 0.49, std(0xf3efe6, 0.35), 0, 0.98, -2.68);
+  box(0.12, 0.75, 0.16, std(0x2d2f33, 0.5), 0, 0.35, -2.72);
+  // nav lights
+  const nav = (col, x) => { const m = new THREE.Mesh(new THREE.SphereGeometry(0.05, 8, 6), new THREE.MeshBasicMaterial({ color: col })); m.position.set(x, 0.86, 1.8); g.add(m); };
+  nav(0xff2a2a, 0.42); nav(0x2aff6a, -0.42);
+  // stern flag
+  const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 1.3, 6), std(0xcccccc, 0.3, { metalness: 0.8 }));
+  pole.position.set(0.55, 1.2, -2.25); g.add(pole);
+  const flagGeo = new THREE.BufferGeometry();
+  flagGeo.setAttribute('position', new THREE.Float32BufferAttribute([0, 0, 0, 0, -0.3, 0, 0, -0.15, -0.5], 3));
+  flagGeo.computeVertexNormals();
+  const flag = new THREE.Mesh(flagGeo, std(0xffb020, 0.7, { side: THREE.DoubleSide }));
+  flag.position.set(0.55, 1.84, -2.25); g.add(flag);
+  return { g, wheel, flag, driver };
+}
+const boat = buildBoat();
+boat.g.rotation.order = 'YXZ';
+scene.add(boat.g);
+
+/* ============================================================
+   Wake ribbon (white trail that spreads and dissolves)
+   ============================================================ */
+const WP = 220, WX = 9, WAKE_LIFE = 7;
+const wakeGeo = new THREE.BufferGeometry();
+const wPos = new Float32Array(WP * WX * 3), wS = new Float32Array(WP * WX * 2), wI = new Float32Array(WP * WX);
+wakeGeo.setAttribute('position', new THREE.BufferAttribute(wPos, 3).setUsage(THREE.DynamicDrawUsage));
+wakeGeo.setAttribute('aS', new THREE.BufferAttribute(wS, 2).setUsage(THREE.DynamicDrawUsage));
+wakeGeo.setAttribute('aI', new THREE.BufferAttribute(wI, 1).setUsage(THREE.DynamicDrawUsage));
+{
+  const idx = [];
+  for (let i = 0; i < WP - 1; i++) for (let j = 0; j < WX - 1; j++) {
+    const a = i * WX + j, b = a + 1, c = a + WX, d = c + 1;
+    idx.push(a, c, b, b, c, d);
+  }
+  wakeGeo.setIndex(idx);
+}
+const wakeMat = new THREE.ShaderMaterial({
+  transparent: true, depthWrite: false, side: THREE.DoubleSide,
+  polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4,
+  uniforms: { uSun: U.sun },
+  vertexShader: /* glsl */`
+    attribute vec2 aS; attribute float aI;
+    varying vec2 vS; varying float vI; varying vec3 vW;
+    void main(){ vS = aS; vI = aI; vec4 w = modelMatrix*vec4(position,1.); vW = w.xyz; gl_Position = projectionMatrix*viewMatrix*w; }`,
+  fragmentShader: /* glsl */`
+    ${GLSL_NOISE}
+    varying vec2 vS; varying float vI; varying vec3 vW;
+    void main(){
+      float side = abs(vS.x), age = vS.y;
+      float n = fbm(vW.xz*0.9);
+      float n2 = noise(vW.xz*3.3 + 11.);
+      float core = (1. - smoothstep(0.15, 1.0, side)) * (1. - smoothstep(0.0, 0.45, age));
+      float edge = smoothstep(0.5, 0.82, side) * (1. - smoothstep(0.86, 1.0, side)) * (1. - smoothstep(0.3, 1.0, age));
+      float a = core*(0.55 + 0.9*n) + edge*(0.35 + 0.9*n2);
+      a = smoothstep(0.25, 0.85, a) * vI * (1. - age);
+      vec3 c = pow(vec3(1.0, 0.9, 0.85), vec3(2.2)) * 0.9;
+      gl_FragColor = vec4(c, a*0.9);
+      #include <tonemapping_fragment>
+      #include <colorspace_fragment>
+    }`,
+});
+const wake = new THREE.Mesh(wakeGeo, wakeMat);
+wake.frustumCulled = false;
+wake.renderOrder = 2;
+scene.add(wake);
+const trail = [];
+
+/* ============================================================
+   Spray / sparkle particles
+   ============================================================ */
+const MAXP = 2600;
+const pGeo = new THREE.BufferGeometry();
+const pPos = new Float32Array(MAXP * 3), pCol = new Float32Array(MAXP * 3), pSize = new Float32Array(MAXP), pAlpha = new Float32Array(MAXP);
+const pVel = new Float32Array(MAXP * 3), pLife = new Float32Array(MAXP), pMax = new Float32Array(MAXP), pBase = new Float32Array(MAXP), pGrav = new Float32Array(MAXP);
+pGeo.setAttribute('position', new THREE.BufferAttribute(pPos, 3).setUsage(THREE.DynamicDrawUsage));
+pGeo.setAttribute('color', new THREE.BufferAttribute(pCol, 3).setUsage(THREE.DynamicDrawUsage));
+pGeo.setAttribute('aSize', new THREE.BufferAttribute(pSize, 1).setUsage(THREE.DynamicDrawUsage));
+pGeo.setAttribute('aAlpha', new THREE.BufferAttribute(pAlpha, 1).setUsage(THREE.DynamicDrawUsage));
+const pMat = new THREE.ShaderMaterial({
+  transparent: true, depthWrite: false, vertexColors: true,
+  uniforms: { uScale: { value: 1 } },
+  vertexShader: /* glsl */`
+    uniform float uScale;
+    attribute float aSize; attribute float aAlpha;
+    varying vec3 vCol; varying float vA;
+    void main(){
+      vec4 mv = modelViewMatrix*vec4(position,1.);
+      gl_PointSize = min(aSize * uScale / max(-mv.z, 0.1), 90.0);
+      gl_Position = projectionMatrix*mv;
+      vCol = color; vA = aAlpha * smoothstep(2.0, 6.0, -mv.z);
+    }`,
+  fragmentShader: /* glsl */`
+    varying vec3 vCol; varying float vA;
+    void main(){
+      float d = length(gl_PointCoord - 0.5);
+      if(d > 0.5) discard;
+      gl_FragColor = vec4(vCol, smoothstep(0.5, 0.0, d) * vA);
+      #include <tonemapping_fragment>
+      #include <colorspace_fragment>
+    }`,
+});
+const particles = new THREE.Points(pGeo, pMat);
+particles.frustumCulled = false;
+particles.renderOrder = 3;
+scene.add(particles);
+let pHead = 0;
+function emit(x, y, z, vx, vy, vz, size, life, r, g, b, grav = 1) {
+  const i = pHead; pHead = (pHead + 1) % MAXP;
+  pPos[i * 3] = x; pPos[i * 3 + 1] = y; pPos[i * 3 + 2] = z;
+  pVel[i * 3] = vx; pVel[i * 3 + 1] = vy; pVel[i * 3 + 2] = vz;
+  pCol[i * 3] = r; pCol[i * 3 + 1] = g; pCol[i * 3 + 2] = b;
+  pLife[i] = life; pMax[i] = life; pBase[i] = size; pGrav[i] = grav;
+}
+const SPRAY = [0.95, 0.86, 0.82];
+function burst(x, y, z, n, spd, up, palette = [SPRAY], size = 0.6, grav = 1) {
+  for (let k = 0; k < n; k++) {
+    const a = Math.random() * Math.PI * 2, s = spd * (0.3 + Math.random() * 0.7);
+    const c = palette[(Math.random() * palette.length) | 0];
+    emit(x, y, z, Math.cos(a) * s, up * (0.4 + Math.random() * 0.8), Math.sin(a) * s,
+      size * (0.5 + Math.random()), 0.6 + Math.random() * 0.8, c[0], c[1], c[2], grav);
+  }
+}
+function updateParticles(dt) {
+  const drag = Math.exp(-0.7 * dt);
+  for (let i = 0; i < MAXP; i++) {
+    if (pLife[i] <= 0) { pAlpha[i] = 0; continue; }
+    pLife[i] -= dt;
+    const i3 = i * 3;
+    pVel[i3 + 1] -= 9.81 * pGrav[i] * dt;
+    pVel[i3] *= drag; pVel[i3 + 1] *= drag; pVel[i3 + 2] *= drag;
+    pPos[i3] += pVel[i3] * dt; pPos[i3 + 1] += pVel[i3 + 1] * dt; pPos[i3 + 2] += pVel[i3 + 2] * dt;
+    if (pVel[i3 + 1] < 0 && pPos[i3 + 1] < 2.6 && pPos[i3 + 1] < waveH(pPos[i3], pPos[i3 + 2]) - 0.05) pLife[i] = 0;
+    const k = Math.max(0, pLife[i] / pMax[i]);
+    pAlpha[i] = Math.min(1, k * 2.2) * 0.85;
+    pSize[i] = pBase[i] * (1.7 - 0.7 * k);
+  }
+  pGeo.attributes.position.needsUpdate = true;
+  pGeo.attributes.color.needsUpdate = true;
+  pGeo.attributes.aSize.needsUpdate = true;
+  pGeo.attributes.aAlpha.needsUpdate = true;
+}
+
+/* ============================================================
+   Game objects: rocks, coins, buoy gates
+   ============================================================ */
+// --- rocks
+const rockMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, flatShading: true, envMapIntensity: 0.4 });
+const rockGeos = [];
+for (let v = 0; v < 6; v++) {
+  const g = new THREE.IcosahedronGeometry(1, 3);
+  const p = g.attributes.position, cols = new Float32Array(p.count * 3);
+  const seed = v * 17.3;
+  const wet = C(0x1e1a1c), mid = C(0x4a403d), top = C(0x6d625c), moss = C(0x3c4a32);
+  for (let i = 0; i < p.count; i++) {
+    let x = p.getX(i), y = p.getY(i), z = p.getZ(i);
+    const n = fbm3(x * 1.4 + seed, y * 1.4, z * 1.4 + seed);
+    const s = 0.7 + 0.65 * n;
+    x *= s; y *= s * (y > 0 ? 1.15 : 1); z *= s;
+    p.setXYZ(i, x, y, z);
+    const c = new THREE.Color();
+    if (y < -0.05) c.copy(wet).lerp(moss, 0.4 * hash3(x, y, z));
+    else c.copy(mid).lerp(top, Math.min(1, y * 1.3)).lerp(wet, 0.25 * hash3(z, x, y));
+    cols[i * 3] = c.r; cols[i * 3 + 1] = c.g; cols[i * 3 + 2] = c.b;
+  }
+  g.setAttribute('color', new THREE.BufferAttribute(cols, 3));
+  g.computeVertexNormals();
+  rockGeos.push(g);
+}
+const rocks = [];
+for (let i = 0; i < 20; i++) {
+  const m = new THREE.Mesh(rockGeos[i % rockGeos.length], rockMat);
+  scene.add(m);
+  rocks.push({ m, x: 1e5, z: 1e5, r: 3 });
+}
+
+// --- coins
+const coinGeo = new THREE.CylinderGeometry(0.7, 0.7, 0.14, 32).rotateX(Math.PI / 2);
+const coinMat = new THREE.MeshStandardMaterial({ color: 0xffc83a, metalness: 0.9, roughness: 0.22, emissive: 0x6a3a00, emissiveIntensity: 0.8 });
+const coinRimGeo = new THREE.TorusGeometry(0.7, 0.06, 8, 32);
+const coinGlowMat = new THREE.SpriteMaterial({ map: glowTexture('rgba(255,235,160,1)', 'rgba(255,180,70,0.45)'), blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, opacity: 0.75 });
+const coins = [];
+for (let i = 0; i < 45; i++) {
+  const g = new THREE.Group();
+  g.add(new THREE.Mesh(coinGeo, coinMat));
+  g.add(new THREE.Mesh(coinRimGeo, coinMat));
+  const glow = new THREE.Sprite(coinGlowMat); glow.scale.set(3.2, 3.2, 1); g.add(glow);
+  g.visible = false; scene.add(g);
+  coins.push({ g, x: 0, z: 0, active: false, ph: Math.random() * 6.28 });
+}
+
+// --- buoy gates
+const buoyGeo = (() => {
+  const pts = [[0, -0.7], [0.45, -0.62], [0.62, -0.2], [0.6, 0.25], [0.42, 0.55], [0.16, 0.75], [0.14, 1.55], [0.22, 1.62], [0, 1.7]]
+    .map(p => new THREE.Vector2(p[0], p[1]));
+  const g = new THREE.LatheGeometry(pts, 20);
+  const p = g.attributes.position, cols = new Float32Array(p.count * 3);
+  const red = C(0xd7263d), wht = C(0xf5f0e8), yel = C(0xffc400);
+  for (let i = 0; i < p.count; i++) {
+    const y = p.getY(i);
+    const c = y > 1.5 ? yel : (Math.floor((y + 0.7) / 0.42) % 2 ? wht : red);
+    cols[i * 3] = c.r; cols[i * 3 + 1] = c.g; cols[i * 3 + 2] = c.b;
+  }
+  g.setAttribute('color', new THREE.BufferAttribute(cols, 3));
+  g.computeVertexNormals();
+  return g;
+})();
+const buoyMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.5, envMapIntensity: 0.6 });
+const lampGlowMat = new THREE.SpriteMaterial({ map: glowTexture('rgba(255,240,200,1)', 'rgba(255,120,60,0.5)'), blending: THREE.AdditiveBlending, depthWrite: false, transparent: true });
+const archGeo = new THREE.TorusGeometry(4.6, 0.13, 10, 56, Math.PI);
+const pennGeo = new THREE.BufferGeometry();
+pennGeo.setAttribute('position', new THREE.Float32BufferAttribute([-0.22, 0, 0, 0.22, 0, 0, 0, -0.6, 0], 3));
+pennGeo.computeVertexNormals();
+const pennMats = [0xffd23f, 0x3ec1d3, 0xff4f79].map(c => new THREE.MeshStandardMaterial({ color: c, roughness: 0.7, side: THREE.DoubleSide, emissive: c, emissiveIntensity: 0.15 }));
+const GATE_HALF = 4.6;
+const gates = [];
+for (let i = 0; i < 5; i++) {
+  const g = new THREE.Group();
+  const archMat = new THREE.MeshStandardMaterial({ color: 0xff8a5c, emissive: 0xff6a3d, emissiveIntensity: 1.6, roughness: 0.4 });
+  const arch = new THREE.Mesh(archGeo, archMat); arch.position.y = 1.55; g.add(arch);
+  const pens = [];
+  for (let k = 0; k < 9; k++) {
+    const a = 0.22 + k / 8 * (Math.PI - 0.44);
+    const pm = new THREE.Mesh(pennGeo, pennMats[k % 3]);
+    pm.position.set(Math.cos(a) * 4.6, 1.55 + Math.sin(a) * 4.6 - 0.1, 0);
+    g.add(pm); pens.push(pm);
+  }
+  const buoys = [], lamps = [];
+  for (const sx of [-1, 1]) {
+    const b = new THREE.Mesh(buoyGeo, buoyMat); b.position.x = sx * GATE_HALF; g.add(b); buoys.push(b);
+    const lamp = new THREE.Sprite(lampGlowMat.clone()); lamp.scale.set(1.6, 1.6, 1); lamp.position.set(0, 1.8, 0); b.add(lamp); lamps.push(lamp);
+  }
+  scene.add(g);
+  gates.push({ g, arch, archMat, pens, buoys, lamps, x: 1e5, z: 1e5, yaw: 0, passed: false, prevLz: 0, glow: 0 });
+}
+
+/* ============================================================
+   Seagulls (procedural, flapping / gliding, circling the boat)
+   ============================================================ */
+function makeGull() {
+  const g = new THREE.Group();
+  const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85, side: THREE.DoubleSide });
+  const W = C(0xf4f1ec), G = C(0xb9bcc4), K = C(0x1c1c20), Y = C(0xf2b233);
+  g.add(new THREE.Mesh(paint(new THREE.SphereGeometry(0.2, 12, 8).scale(1, 0.85, 2.6), W), mat));
+  const head = new THREE.Mesh(paint(new THREE.SphereGeometry(0.14, 10, 8), W), mat); head.position.set(0, 0.1, 0.5); g.add(head);
+  const beak = new THREE.Mesh(paint(new THREE.ConeGeometry(0.035, 0.18, 6).rotateX(Math.PI / 2), Y), mat); beak.position.set(0, 0.07, 0.68); g.add(beak);
+  const tailGeo = new THREE.BufferGeometry();
+  tailGeo.setAttribute('position', new THREE.Float32BufferAttribute([0, 0.02, -0.4, 0.18, 0.02, -0.75, -0.18, 0.02, -0.75], 3));
+  tailGeo.computeVertexNormals();
+  g.add(new THREE.Mesh(paint(tailGeo, W), mat));
+  const panel = (verts, cols) => {
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3));
+    geo.setAttribute('color', new THREE.Float32BufferAttribute(cols.flatMap(c => [c.r, c.g, c.b]), 3));
+    geo.computeVertexNormals(); return new THREE.Mesh(geo, mat);
+  };
+  const wing = () => {
+    const pivot = new THREE.Group(); pivot.position.x = 0.12;
+    pivot.add(panel([0, 0, 0.2, 0.75, 0, 0.13, 0.75, 0, -0.14, 0, 0, 0.2, 0.75, 0, -0.14, 0, 0, -0.2], [G, G, G, G, G, G]));
+    const elbow = new THREE.Group(); elbow.position.x = 0.75; pivot.add(elbow);
+    elbow.add(panel([0, 0, 0.13, 0.85, 0, -0.04, 0.55, 0, -0.18, 0, 0, 0.13, 0.55, 0, -0.18, 0, 0, -0.14], [G, K, K, G, K, G]));
+    return { pivot, elbow };
+  };
+  const wl = wing(); g.add(wl.pivot);
+  const right = new THREE.Group(); right.scale.x = -1; g.add(right);
+  const wr = wing(); right.add(wr.pivot);
+  g.scale.setScalar(1.15);
+  return { g, wl, wr };
+}
+const gulls = [];
+const gullCenter = new THREE.Vector3();
+for (let i = 0; i < 9; i++) {
+  const gl = makeGull();
+  scene.add(gl.g);
+  gulls.push({
+    ...gl, a: Math.random() * 6.28, w: (0.25 + Math.random() * 0.3) * (Math.random() < 0.5 ? -1 : 1),
+    r: 14 + Math.random() * 26, y: 9 + Math.random() * 12, seed: Math.random() * 100, ph: Math.random() * 6, amp: 0.5,
+    prev: new THREE.Vector3(),
+  });
+}
+
+/* ============================================================
+   Boat state & input
+   ============================================================ */
+const B = { x: 0, z: 0, y: 0.3, vy: 0, yaw: Math.PI + 0.25, yawRate: 0, vx: 0, vz: 0, pitch: 0, pitchV: 0, roll: 0, rollV: 0, air: false, vf: 0, inWater: true, steer: 0 };
+const MAXV = 26;
+const keys = { up: false, down: false, left: false, right: false };
+const KEYMAP = { KeyW: 'up', ArrowUp: 'up', KeyS: 'down', ArrowDown: 'down', KeyA: 'left', ArrowLeft: 'left', KeyD: 'right', ArrowRight: 'right' };
+const hint = document.getElementById('hint');
+let hintTimer = null;
+const hideHint = () => { if (!hintTimer) hintTimer = setTimeout(() => (hint.style.opacity = 0), 2500); };
+setTimeout(hideHint, 6000);
+addEventListener('keydown', e => { const k = KEYMAP[e.code]; if (k) { keys[k] = true; e.preventDefault(); hideHint(); } });
+addEventListener('keyup', e => { const k = KEYMAP[e.code]; if (k) { keys[k] = false; e.preventDefault(); } });
+addEventListener('blur', () => { for (const k in keys) keys[k] = false; });
+
+let score = 0, crashCD = 0, shake = 0;
+const scoreEl = document.getElementById('score'), speedEl = document.getElementById('speed'), flashEl = document.getElementById('flash');
+function addScore(n) {
+  score = Math.max(0, score + n);
+  scoreEl.textContent = score;
+  scoreEl.classList.remove('pop', 'neg');
+  void scoreEl.offsetWidth;
+  scoreEl.classList.add(n >= 0 ? 'pop' : 'neg');
+  setTimeout(() => scoreEl.classList.remove('pop', 'neg'), 220);
+}
+
+/* ============================================================
+   Spawning
+   ============================================================ */
+function clearAt(x, z, rad, self) {
+  if (Math.hypot(x - B.x, z - B.z) < 26) return false;
+  for (const r of rocks) if (r !== self && Math.hypot(x - r.x, z - r.z) < r.r + rad + 3) return false;
+  for (const g of gates) if (g !== self && Math.hypot(x - g.x, z - g.z) < GATE_HALF + rad + 4) return false;
+  return true;
+}
+function randPos(minD, maxD, spread) {
+  const a = B.yaw + (Math.random() * 2 - 1) * spread;
+  const d = minD + Math.random() * (maxD - minD);
+  return [B.x + Math.sin(a) * d, B.z + Math.cos(a) * d];
+}
+function placeRock(r, minD, maxD, spread) {
+  r.r = 2 + Math.random() * 3.5;
+  for (let t = 0; t < 25; t++) {
+    const [x, z] = randPos(minD, maxD, spread);
+    if (clearAt(x, z, r.r, r)) { r.x = x; r.z = z; break; }
+  }
+  r.m.position.set(r.x, -r.r * 0.3, r.z);
+  r.m.scale.set(r.r, r.r * (0.65 + Math.random() * 0.6), r.r);
+  r.m.rotation.set(Math.random() * 0.3, Math.random() * 6.28, Math.random() * 0.3);
+}
+function gateLocal(g) {
+  const dx = B.x - g.x, dz = B.z - g.z, c = Math.cos(g.yaw), s = Math.sin(g.yaw);
+  return [dx * c - dz * s, dx * s + dz * c];
+}
+function placeGate(g, minD, maxD, spread) {
+  for (let t = 0; t < 25; t++) {
+    const [x, z] = randPos(minD, maxD, spread);
+    if (clearAt(x, z, GATE_HALF, g)) { g.x = x; g.z = z; break; }
+  }
+  g.yaw = Math.atan2(B.x - g.x, B.z - g.z) + (Math.random() - 0.5) * 0.5;
+  g.passed = false; g.glow = 0;
+  g.archMat.emissive.setHex(0xff6a3d); g.archMat.color.setHex(0xff8a5c); g.archMat.emissiveIntensity = 1.6;
+  g.prevLz = gateLocal(g)[1];
+}
+function spawnCoinLine(minD, maxD, spread) {
+  const free = coins.filter(c => !c.active);
+  if (free.length < 5) return;
+  const [x0, z0] = randPos(minD, maxD, spread);
+  const dir = B.yaw + (Math.random() - 0.5) * 1.2, curve = (Math.random() - 0.5) * 0.5;
+  const fx = Math.sin(dir), fz = Math.cos(dir), lx = Math.cos(dir), lz = -Math.sin(dir);
+  for (let k = 0; k < 5; k++) {
+    const off = Math.sin(k * 0.7) * 6 * curve;
+    const x = x0 + fx * k * 4.5 + lx * off, z = z0 + fz * k * 4.5 + lz * off;
+    let ok = true;
+    for (const r of rocks) if (Math.hypot(x - r.x, z - r.z) < r.r + 2.5) ok = false;
+    for (const g of gates) if (Math.hypot(x - g.x, z - g.z) < GATE_HALF + 1.5) ok = false;
+    if (!ok) continue;
+    const c = free[k];
+    c.x = x; c.z = z; c.active = true; c.g.visible = true;
+  }
+}
+function initWorld() {
+  for (const r of rocks) placeRock(r, 35, 230, Math.PI);
+  gates.forEach((g, i) => placeGate(g, i === 0 ? 45 : 60, i === 0 ? 70 : 220, i === 0 ? 0.25 : Math.PI));
+  spawnCoinLine(28, 40, 0.15);
+  for (let i = 0; i < 6; i++) spawnCoinLine(50, 200, Math.PI);
+}
+
+/* ============================================================
+   Boat physics (buoyancy from sampled wave heights)
+   ============================================================ */
+function stepBoat(dt) {
+  const thr = keys.up ? 1 : 0, brk = keys.down ? 1 : 0;
+  const steer = (keys.left ? 1 : 0) - (keys.right ? 1 : 0);
+  B.steer += (steer - B.steer) * Math.min(1, 6 * dt);
+  const s = Math.sin(B.yaw), c = Math.cos(B.yaw);
+  const fx = s, fz = c, lx = c, lz = -s;
+  const hl = (ax, az) => waveH(B.x + ax * lx + az * fx, B.z + ax * lz + az * fz);
+  const hB = hl(0, 2.0), hS = hl(0, -2.0), hL = hl(1.0, 0.2), hR = hl(-1.0, 0.2), hC = hl(0, 0);
+  const hAvg = (hB + hS + hL + hR + 2 * hC) / 6;
+
+  let vf = B.vx * fx + B.vz * fz, vl = B.vx * lx + B.vz * lz;
+  const sub = hAvg + 0.55 + Math.min(Math.abs(vf), MAXV) * 0.006 - B.y;
+  const wasAir = B.air;
+  B.air = sub < -0.12;
+  B.inWater = !B.air;
+  if (wasAir && !B.air && B.vy < -2.2) onLanding(-B.vy);
+
+  // vertical buoyancy (spring-damper only while submerged -> can get airborne off crests)
+  if (sub > 0) B.vy += (62 * Math.min(sub, 1.5) - 9.81 - 5.5 * B.vy) * dt;
+  else B.vy -= 9.81 * dt;
+  B.y += B.vy * dt;
+
+  const slope = (hB - hS) / 4.0;
+  if (B.inWater) {
+    const thrust = thr ? 11 * (1 - Math.max(0, vf) / MAXV) : 0;
+    const brake = brk ? (vf > 0.5 ? -10 : (vf > -6 ? -4 : 0)) : 0;
+    vf += (thrust + brake - 9.81 * slope * 0.55) * dt;   // surfing: downhill accelerates
+    vf -= vf * (0.12 + (thr ? 0 : 0.18)) * dt;
+    vl *= Math.exp(-3.2 * dt);
+  } else {
+    vf -= vf * 0.02 * dt;
+  }
+  const steerEff = Math.min(1, Math.abs(vf) / 5) * 0.85 + 0.15;
+  const targetYR = B.steer * 1.35 * steerEff * (vf < -0.3 ? -1 : 1) * (B.inWater ? 1 : 0.25);
+  B.yawRate += (targetYR - B.yawRate) * Math.min(1, 4 * dt);
+  B.vx = fx * vf + lx * vl; B.vz = fz * vf + lz * vl;  // recompose in old frame -> natural drift after turning
+  B.yaw += B.yawRate * dt;
+  B.x += B.vx * dt; B.z += B.vz * dt;
+  B.vf = vf;
+
+  // pitch & roll follow the local wave surface (+ planing bow-rise, turn lean)
+  const planing = 0.07 * Math.sin(Math.min(1, Math.max(0, vf) / MAXV) * Math.PI) + (thr ? 0.025 : 0);
+  const pitchT = Math.atan(slope) + planing;
+  const lean = Math.max(-0.35, Math.min(0.35, -B.yawRate * Math.max(0, vf) * 0.012));
+  const rollT = Math.atan((hL - hR) / 2.0) + lean;
+  if (B.inWater) {
+    B.pitchV += (45 * (pitchT - B.pitch) - 7 * B.pitchV) * dt;
+    B.rollV += (40 * (rollT - B.roll) - 6 * B.rollV) * dt;
+  } else {
+    B.pitchV += (-0.55 - 0.5 * B.pitchV) * dt;
+    B.rollV *= 1 - dt;
+  }
+  B.pitch += B.pitchV * dt; B.roll += B.rollV * dt;
+}
+function onLanding(impact) {
+  const n = Math.min(160, impact * 22) | 0;
+  burst(B.x, waveH(B.x, B.z) + 0.2, B.z, n, 2 + impact * 0.9, 2.5 + impact * 0.8, [SPRAY], 0.75);
+  shake = Math.max(shake, Math.min(0.35, impact * 0.04));
+}
+
+/* ============================================================
+   Per-frame systems
+   ============================================================ */
+const tmpV = new THREE.Vector3(), tmpW = new THREE.Vector3();
+const GOLD = [[1.6, 1.1, 0.35], [1.4, 0.9, 0.25], [1.8, 1.4, 0.7]];
+const PARTY = [[1.6, 1.0, 0.3], [1.5, 0.45, 0.6], [0.4, 1.3, 1.4], [1.6, 1.5, 1.2]];
+
+function emitBoatSpray(dt) {
+  const vf = Math.abs(B.vf);
+  if (!B.inWater) return;
+  const fx = Math.sin(B.yaw), fz = Math.cos(B.yaw), lx = Math.cos(B.yaw), lz = -Math.sin(B.yaw);
+  if (vf > 2.5) {
+    for (const side of [1, -1]) {
+      const turnBoost = 1 + Math.max(0, -side * B.yawRate) * 1.6;
+      let n = vf * 4.5 * turnBoost * dt; n = Math.floor(n) + (Math.random() < n % 1 ? 1 : 0);
+      for (let k = 0; k < n; k++) {
+        tmpV.set(side * 0.82, 0.05, 1.0 + Math.random() * 0.8);
+        boat.g.localToWorld(tmpV);
+        const out = (1.2 + vf * 0.11 * Math.random()) * turnBoost;
+        const up = 1.0 + vf * 0.12 * Math.random();
+        emit(tmpV.x, tmpV.y, tmpV.z,
+          lx * side * out + B.vx * 0.5 + (Math.random() - 0.5),
+          up,
+          lz * side * out + B.vz * 0.5 + (Math.random() - 0.5),
+          0.25 + Math.random() * 0.45, 0.6 + Math.random() * 0.6, SPRAY[0], SPRAY[1], SPRAY[2]);
+      }
+    }
+  }
+  if (keys.up || vf > 4) {
+    let n = (4 + vf * 2.5) * dt; n = Math.floor(n) + (Math.random() < n % 1 ? 1 : 0);
+    for (let k = 0; k < n; k++) {
+      tmpV.set((Math.random() - 0.5) * 0.4, 0.0, -2.75);
+      boat.g.localToWorld(tmpV);
+      emit(tmpV.x, tmpV.y, tmpV.z,
+        B.vx * 0.25 - fx * 1.5 + (Math.random() - 0.5) * 1.5, 0.8 + Math.random() * 2.0,
+        B.vz * 0.25 - fz * 1.5 + (Math.random() - 0.5) * 1.5,
+        0.45 + Math.random() * 0.6, 0.45 + Math.random() * 0.45, SPRAY[0], SPRAY[1], SPRAY[2]);
+    }
+  }
+}
+
+function updateWake() {
+  const fx = Math.sin(B.yaw), fz = Math.cos(B.yaw);
+  const sx = B.x - fx * 2.4, sz = B.z - fz * 2.4;
+  const inten = B.inWater ? Math.min(1, Math.max(0.08, Math.abs(B.vf) / 14)) : 0;
+  const last = trail[0];
+  if (!last || Math.hypot(sx - last.x, sz - last.z) > 1.0) {
+    trail.unshift({ x: sx, z: sz, t: T, i: inten, v: Math.max(3, Math.abs(B.vf)) });
+    if (trail.length > WP - 1) trail.pop();
+  }
+  while (trail.length && T - trail[trail.length - 1].t > WAKE_LIFE) trail.pop();
+  const pts = [{ x: sx, z: sz, t: T, i: inten, v: Math.max(3, Math.abs(B.vf)) }, ...trail];
+  const n = pts.length;
+  for (let i = 0; i < n; i++) {
+    const p = pts[i], pa = pts[Math.max(0, i - 1)], pb = pts[Math.min(n - 1, i + 1)];
+    let tx = pa.x - pb.x, tz = pa.z - pb.z;
+    const tl = Math.hypot(tx, tz);
+    if (tl < 1e-3) { tx = fx; tz = fz; } else { tx /= tl; tz /= tl; }
+    const px = -tz, pz = tx;
+    const age = T - p.t, an = Math.min(1, age / WAKE_LIFE);
+    const hw = 0.75 + age * (0.4 + 0.22 * p.v);
+    for (let j = 0; j < WX; j++) {
+      const s = -1 + 2 * j / (WX - 1);
+      const x = p.x + px * hw * s, z = p.z + pz * hw * s;
+      const k = i * WX + j;
+      wPos[k * 3] = x; wPos[k * 3 + 1] = waveH(x, z) + 0.1 + an * 0.2; wPos[k * 3 + 2] = z;
+      wS[k * 2] = s; wS[k * 2 + 1] = an;
+      wI[k] = p.i;
+    }
+  }
+  wakeGeo.setDrawRange(0, Math.max(0, n - 1) * (WX - 1) * 6);
+  wakeGeo.attributes.position.needsUpdate = true;
+  wakeGeo.attributes.aS.needsUpdate = true;
+  wakeGeo.attributes.aI.needsUpdate = true;
+}
+
+function collideBoat(ox, oz, minD, hard) {
+  const dx = B.x - ox, dz = B.z - oz, d = Math.hypot(dx, dz);
+  if (d >= minD || d < 1e-4) return false;
+  const nx = dx / d, nz = dz / d;
+  B.x = ox + nx * minD; B.z = oz + nz * minD;
+  const vn = B.vx * nx + B.vz * nz;
+  if (vn < 0) { const e = 1 + (hard ? 0.6 : 0.3); B.vx -= e * vn * nx; B.vz -= e * vn * nz; }
+  const k = hard ? 0.45 : 0.8;
+  B.vx *= k; B.vz *= k;
+  return -vn;
+}
+
+let coinTimer = 0;
+function updateObjects(dt) {
+  const obs = oceanUniforms.uObs.value;
+  let on = 0;
+
+  // rocks
+  for (const r of rocks) {
+    const d = Math.hypot(r.x - B.x, r.z - B.z);
+    if (d > 250) placeRock(r, 160, 235, 1.2);
+    const imp = collideBoat(r.x, r.z, r.r * 0.85 + 1.1, true);
+    if (imp !== false && crashCD <= 0 && imp > 1.5) {
+      crashCD = 1.0;
+      shake = 0.7;
+      B.yawRate += (Math.random() < 0.5 ? -1 : 1) * (1 + imp * 0.08);
+      B.vy += 2.5;
+      addScore(-25);
+      flashEl.style.opacity = 1; setTimeout(() => (flashEl.style.opacity = 0), 140);
+      const cx = B.x - (B.x - r.x) * 0.3, cz = B.z - (B.z - r.z) * 0.3;
+      burst(cx, waveH(cx, cz) + 0.4, cz, 140, 6, 6, [SPRAY], 0.8);
+    }
+    if (d < 320 && on < MAX_OBS) obs[on++].set(r.x, r.z, r.r * 0.9, 2.6);
+  }
+
+  // gates
+  for (const g of gates) {
+    const d = Math.hypot(g.x - B.x, g.z - B.z);
+    if (d > 250 || (g.passed && d > 70)) placeGate(g, 150, 230, 1.0);
+    const gy = waveH(g.x, g.z);
+    g.g.position.set(g.x, gy, g.z);
+    g.g.rotation.y = g.yaw;
+    const c = Math.cos(g.yaw), s = Math.sin(g.yaw);
+    g.buoys.forEach((b, k) => {
+      const sx = k ? 1 : -1;
+      const bx = g.x + sx * GATE_HALF * c, bz = g.z - sx * GATE_HALF * s;
+      b.position.y = waveH(bx, bz) - gy;
+      b.rotation.x = Math.sin(T * 1.3 + k * 2 + g.x) * 0.12;
+      b.rotation.z = Math.cos(T * 1.1 + k + g.z) * 0.12;
+      const blink = 0.5 + 0.5 * Math.sin(T * 4 + k * Math.PI);
+      g.lamps[k].material.opacity = 0.35 + 0.65 * blink;
+      if (collideBoat(bx, bz, 1.6, false) !== false && crashCD <= 0) { crashCD = 0.4; shake = Math.max(shake, 0.2); }
+      if (d < 320 && on < MAX_OBS) obs[on++].set(bx, bz, 0.55, 1.1);
+    });
+    g.arch.position.y = 1.55 + Math.sin(T * 1.2 + g.x) * 0.05;
+    g.pens.forEach((p, k) => { p.rotation.x = Math.sin(T * 3 + k) * 0.35; });
+    const [lx, lz] = gateLocal(g);
+    if (!g.passed && Math.sign(lz) !== Math.sign(g.prevLz) && Math.abs(lx) < GATE_HALF - 0.4 && d < 12) {
+      g.passed = true; g.glow = 1;
+      g.archMat.emissive.setHex(0x4dffb5); g.archMat.color.setHex(0x8affd0);
+      addScore(50);
+      for (let k = 0; k < 9; k++) {
+        tmpW.copy(g.pens[k].position); g.g.localToWorld(tmpW);
+        burst(tmpW.x, tmpW.y, tmpW.z, 8, 3, 3, PARTY, 0.45, 0.35);
+      }
+    }
+    g.prevLz = lz;
+    if (g.glow > 0) { g.glow = Math.max(0, g.glow - dt * 0.6); g.archMat.emissiveIntensity = 0.6 + 2.5 * g.glow; }
+  }
+  oceanUniforms.uObsN.value = on;
+
+  // coins
+  for (const c of coins) {
+    if (!c.active) continue;
+    const d = Math.hypot(c.x - B.x, c.z - B.z);
+    if (d > 250) { c.active = false; c.g.visible = false; continue; }
+    const y = waveH(c.x, c.z) + 1.15 + Math.sin(T * 2.2 + c.ph) * 0.15;
+    c.g.position.set(c.x, y, c.z);
+    c.g.visible = c.g.position.distanceToSquared(camera.position) > 9;
+    c.g.rotation.y = T * 2.6 + c.ph;
+    if (d < 2.1 && Math.abs(B.y + 0.6 - y) < 2.3) {
+      c.active = false; c.g.visible = false;
+      addScore(10);
+      burst(c.x, y, c.z, 26, 2.5, 3.5, GOLD, 0.35, 0.3);
+    }
+  }
+  coinTimer -= dt;
+  if (coinTimer <= 0) {
+    coinTimer = 0.6;
+    if (coins.filter(c => !c.active).length >= 8) spawnCoinLine(130, 210, 0.9);
+  }
+}
+
+function updateGulls(dt) {
+  const fx = Math.sin(B.yaw), fz = Math.cos(B.yaw);
+  const k = 1 - Math.exp(-1.2 * dt);
+  gullCenter.x += (B.x + fx * 18 - gullCenter.x) * k;
+  gullCenter.z += (B.z + fz * 18 - gullCenter.z) * k;
+  for (const g of gulls) {
+    g.a += g.w * dt;
+    g.prev.copy(g.g.position);
+    const y = g.y + Math.sin(T * 0.4 + g.seed) * 2 + Math.max(0, B.y) * 0.5;
+    g.g.position.set(gullCenter.x + Math.cos(g.a) * g.r, y, gullCenter.z + Math.sin(g.a) * g.r);
+    tmpV.subVectors(g.g.position, g.prev);
+    if (tmpV.lengthSq() > 1e-6) {
+      tmpV.normalize().add(g.g.position);
+      g.g.lookAt(tmpV);
+      g.g.rotateZ(Math.sign(g.w) * 0.38);
+    }
+    const glide = Math.sin(T * 0.35 + g.seed) > 0.1;
+    g.amp += ((glide ? 0.07 : 0.75) - g.amp) * Math.min(1, 3 * dt);
+    g.ph += (glide ? 1.6 : 6.5) * dt;
+    const s = Math.sin(g.ph);
+    for (const w of [g.wl, g.wr]) {
+      w.pivot.rotation.z = 0.12 + s * g.amp;
+      w.elbow.rotation.z = Math.sin(g.ph - 0.6) * g.amp * 0.7 - (glide ? 0.1 : 0);
+    }
+  }
+}
+
+const camLook = new THREE.Vector3();
+function updateCamera(dt) {
+  const vf = Math.abs(B.vf);
+  const fx = Math.sin(B.yaw), fz = Math.cos(B.yaw);
+  const back = 10.5 + vf * 0.12, up = 4.0 + vf * 0.04;
+  const kx = 1 - Math.exp(-3.2 * dt), ky = 1 - Math.exp(-2.2 * dt), kl = 1 - Math.exp(-5 * dt);
+  const p = camera.position;
+  p.x += (B.x - fx * back - p.x) * kx;
+  p.z += (B.z - fz * back - p.z) * kx;
+  p.y += (B.y * 0.5 + up - p.y) * ky;
+  p.y = Math.max(p.y, waveH(p.x, p.z) + 1.4);
+  camLook.x += (B.x + fx * 7 - camLook.x) * kl;
+  camLook.z += (B.z + fz * 7 - camLook.z) * kl;
+  camLook.y += (B.y * 0.6 + 1.3 - camLook.y) * kl;
+  camera.lookAt(camLook);
+  if (shake > 0) {
+    camera.position.x += (Math.random() - 0.5) * shake;
+    camera.position.y += (Math.random() - 0.5) * shake;
+    camera.rotation.z += (Math.random() - 0.5) * shake * 0.05;
+    shake = Math.max(0, shake - dt * 1.4);
+  }
+  camera.fov += (58 + vf * 0.4 - camera.fov) * (1 - Math.exp(-2 * dt));
+  camera.updateProjectionMatrix();
+  pMat.uniforms.uScale.value = innerHeight * renderer.getPixelRatio() / (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2));
+}
+
+/* ============================================================
+   Main loop
+   ============================================================ */
+const clock = new THREE.Clock();
+U.center.value.set(B.x, 0, B.z);
+initWorld();
+B.y = waveH(B.x, B.z) + 0.1;
+camera.position.set(B.x - Math.sin(B.yaw) * 11, 5, B.z - Math.cos(B.yaw) * 11);
+camLook.set(B.x, 1.3, B.z);
+
+function frame() {
+  const dt = Math.min(clock.getDelta(), 0.05);
+  T += dt;
+  U.time.value = T;
+  U.center.value.set(B.x, 0, B.z);
+
+  stepBoat(dt * 0.5); stepBoat(dt * 0.5);
+  crashCD -= dt;
+
+  boat.g.position.set(B.x, B.y, B.z);
+  boat.g.rotation.set(-B.pitch, B.yaw, B.roll);
+  boat.g.updateMatrixWorld();
+  boat.wheel.rotation.z = -B.steer * 1.4;
+  boat.driver.rotation.z = -B.roll * 0.6 + B.steer * 0.08;
+  boat.flag.rotation.y = Math.sin(T * 9) * 0.25 + Math.sin(T * 3.3) * 0.15;
+  oceanUniforms.uBoat.value.set(B.x, B.z, B.yaw, 0);
+  oceanUniforms.uBoatFoam.value = B.inWater ? Math.min(1, 0.25 + Math.abs(B.vf) / 12) : 0;
+
+  updateObjects(dt);
+  emitBoatSpray(dt);
+  updateParticles(dt);
+  updateWake();
+  updateGulls(dt);
+  updateCamera(dt);
+  sky.position.copy(camera.position);
+
+  speedEl.textContent = Math.round(Math.abs(B.vf) * 1.944);
+  renderer.render(scene, camera);
+}
+renderer.setAnimationLoop(frame);
+
+// test hook: lets a headless harness hold keys (no effect on normal play)
+window.__game = { keys, B, get score() { return score; } };
+
+addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+</script>
+</body>
+</html>
