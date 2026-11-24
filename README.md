@@ -196,15 +196,25 @@ HTML 파일 하나로 물류 창고에서 로봇 여러 대가 서로 부딪히�
 
 ---
 
-### 🔹 Step 2-3. 토큰 효율 확인(`/context`) & 실무 모델 선택 기준
+### 🔹 Step 2-3. 외부 공인 벤치마크 (Cursor · Arena · Artificial Analysis) & 모델 선택 기준
 
-1️⃣ **세 모델의 소모 토큰과 결과물 분량 비교**: 각 대화창에서 `/context`로 사용 토큰을 보고, 생성된 코드 줄 수와 함께 비교합니다.
+> **기준 시점:** 2026년 11월 공개 리더보드 기준 ([CursorBench 4.1](https://cursor.com) · [Arena](https://arena.ai) · [Artificial Analysis](https://artificialanalysis.ai))
+
+| 모델 | CursorBench 4.1 (IDE 실전 코딩) | Arena (`arena.ai`) | Artificial Analysis (`v5.0.1`) | API 단가 (1M 입/출력) |
+| :--- | :---: | :--- | :---: | :---: |
+| **Gemini 4 Neon** | **65.4%** (`XHigh`, `$10.67`/작업) | Text **#3** (`1,512`) · WebDev **#5** (`1,765`) · Agent **#3** | **61** (`XHigh` · `High 60.1`) | **`$3.00 / $15.00`** |
+| **Gemini 4 Hydrogen** | **61.4%** (`XHigh`, `$8.09`/작업) | WebDev **#14** (`1,701`) · Agent **#9** | **54** (`XHigh` · `High 51`) | **`$1.50 / $7.50`** |
+| **Claude Opus 5.5** | **58.1%** (`Max`, `$11.88`/작업) | Text · WebDev 상위권 경합 | **59** (`Max`) | `$4.00 / $20.00` |
+| *(참고) Gemini 4 Carbon* | **61.5%** (`High`, `$8.52`/작업) | Text **#1** (`1,527`) · WebDev **#4** (`1,769`) | **60** (`High`) | `$4.00 / $20.00` |
+
+1️⃣ **세 모델의 소모 토큰과 결과물 분량 직접 확인**: 각 대화창에서 `/context`로 사용 토큰을 보고, 생성된 코드 줄 수와 함께 비교합니다.
 
 ```bash
 wc -l *.py *.html
 ```
 
 2️⃣ **현업 모델 운용 공식 & Zero Harness Tax**:
+- **CursorBench · AA Index 실측 요약**: `Gemini 4 Neon`은 IDE 멀티파일 코딩(**65.4%**)과 종합 지능 지수(**61**) 모두 `Claude Opus 5.5`(**58.1% · 59**)를 앞서면서도 토큰 단가가 **25% 저렴**합니다.
 - **평소 빠른 코딩(`Hydrogen`) ➔ 핵심 기능 구현·복합 버그 해결(`Neon`)**을 기본 주력으로 쓰고, 필요할 때 같은 Antigravity 화면 안에서 **`Claude Opus 5.5`**까지 바로 전환해 비교·검증할 수 있습니다.
 - **Zero Harness Tax**: 주요 코딩 벤치마크(DeepSWE · Terminal-Bench) 기준 전용 CLI 대비 품질 손실 없이 12% 이내 비용 효율을 유지해, 도구 파편화 없이 Antigravity 하나로 표준화합니다.
 
