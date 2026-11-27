@@ -1,7 +1,7 @@
 # LG CNS · Antigravity & Gemini 개발자 실습 가이드
 
 > **파일 다운로드 0건 · 실무 눈높이 프롬프트 실습**  
-> 별도 첨부파일이나 브라우저 원격 제어 설정 없이 **빈 폴더 하나만 열고**, 현업에서 동료 개발자에게 말하듯 자연스러운 한 줄 프롬프트를 날려 설계 · 코딩 · 터미널 자동 검증 · Hook/MCP 설정까지 바로 체험합니다.
+> 별도 첨부파일이나 브라우저 원격 제어 설정 없이 **빈 폴더 하나만 열고**, 현업에서 동료 개발자에게 말하듯 자연스러운 한 줄 프롬프트를 날려 설계 · 코딩 · 터미널 자동 검증 · 보안 Hook 설정까지 바로 체험합니다.
 
 ---
 
@@ -9,11 +9,11 @@
 
 | 파트 | 시간 (90분 / 180분) | 핵심 주제 | 현업 실습 시나리오 (첨부파일 불필요) |
 | :--- | :---: | :--- | :--- |
-| **Part 0** | 10분 / 15분 | 환경 세팅 · 무중단 조향 · Gateway | 기업 계정 로그인(앱·CLI·VS Code), `Turbo`, `/btw`, 사내 보안 정책 |
+| **Part 0** | 10분 / 15분 | 환경 세팅 · 샌드박스 제어 · 보안 정책 | 기업 계정 로그인, `Proceed in sandbox` · `accept-edits`, `/btw`, `admin_settings.json` |
 | **Part 1** | 25분 / 45분 | 설계 질문 ~ 터미널 자율 점검 | 사내 예약 서비스를 `/grill-me` ➔ `/plan` ➔ `/goal` 자동 테스트로 완성 |
 | **Part 2** | 25분 / 50분 | 3종 모델(`Hydrogen · Neon · Opus 5.5`) 비교 | 한 줄 3D 비교 + 선착순 중복 방지 · 서버 호출 꼬임 · 결제 오류 수정 |
 | **Part 3** | 15분 / 35분 | 멀티에이전트 · Global/Project 규칙 | `/boost`, `/teamwork`, 전역(`~/.gemini`) vs 프로젝트(`.md`) 규칙·플러그인 |
-| **Part 4** | 10분 / 20분 | Hook & MCP 프롬프트 세팅 | 위험 명령어(`rm -rf`, `DROP TABLE`) 자동 차단 Hook, 로컬 상태 조회 MCP 연결 |
+| **Part 4** | 10분 / 20분 | 보안 Hook 가드레일 & 사내 MCP 정책 | 위험 명령(`rm -rf`·`DROP TABLE`) 및 `.env` 접근 차단 Hook + 승인 MCP 안내 |
 | **Part 5** | 5분 / 15분 | Gemini 데스크탑 앱 미리보기 | 코딩(Antigravity) vs 일상 업무(Gemini 데스크탑), 전사 `Skill` 공유 |
 
 1️⃣ **실습 시작 전 터미널에서 빈 작업 폴더 하나만 만들고 Antigravity로 엽니다**:
@@ -38,10 +38,13 @@ mkdir -p ~/lgcns-agy-lab && cd ~/lgcns-agy-lab && git init
 
 ---
 
-### 🔹 Step 0-2. 멈추지 않는 실시간 조향 (`Turbo` · `/btw`) & Gateway 통제
+### 🔹 Step 0-2. 승인 피로도 줄이기 (`Proceed in sandbox` · `accept-edits`) & `/btw` 조향
 
-1️⃣ **권한 프리셋 전환 (`Turbo`)**: 실습 중 매번 터미널 실행 확인을 누르기 번거롭다면 입력창 우측 하단 모드를 **`Turbo`**로 바꿔 둡니다.
-![Step 0-2 Turbo 모드 선택기](assets/screenshots/turbo_mode_selector.png)
+> **권장 버전 (Windows 패치 반영):** `AGY Desktop 2.32.1+` · `CLI 1.5.7+` · `VS Code 확장 1.13.0+` 이상을 사용합니다.
+
+1️⃣ **`Turbo` 차단 환경에서의 실무 권장 모드 (`Proceed in sandbox` & `Allow/Deny`)**:
+- 기업 보안 정책상 외부 폴더·웹·MCP까지 일괄 허용하는 `Turbo`는 잠겨 있는 것이 표준입니다.
+- 대신 프로젝트 콘솔을 **`Proceed in sandbox`**로 두고(CLI는 `Shift + Tab`으로 **`accept-edits`** 전환), **`admin_settings.json`(MDM)** 또는 로컬 설정으로 안전한 빌드·조회 명령(`pytest`, `git status`, `python3`)은 **`Allow`**, 파괴적 명령(`rm -rf`, `DROP TABLE`) 및 **`.env` 파일 접근은 `Deny`**로 분리하면 보안과 개발 속도를 동시에 잡을 수 있습니다.
 
 2️⃣ **작업 중 끼어들기(`Send Immediately`) & 가벼운 옆 질문(`/btw`)**: 에이전트가 한창 코드를 짜는 중에도 멈추지 않고 조건을 보태거나, 작업 흐름을 어지럽히지 않고 간단한 확인 질문만 던질 수 있습니다.
 
@@ -49,9 +52,9 @@ mkdir -p ~/lgcns-agy-lab && cd ~/lgcns-agy-lab && git init
 /btw 지금 내 PC에 깔린 파이썬 버전이랑 안 쓰는 빈 포트 번호 하나만 짧게 알려줘.
 ```
 
-3️⃣ **Enterprise Gateway & MDM 일괄 제어 (`admin_config.json`)**:
+3️⃣ **Enterprise Gateway & MDM 일괄 제어 (`admin_settings.json`)**:
 - **사내 Proxy 연동**: LiteLLM 및 사내 LLM 게이트웨이·중앙 GCP 서비스 계정으로 트래픽과 예산을 한곳에서 관리합니다.
-- **동일 보안 정책**: `admin_config.json` 배포 하나로 앱 · CLI · VS Code 확장의 허용 모델과 접속 도메인을 똑같이 통제합니다.
+- **동일 보안 정책**: `admin_settings.json` 배포 하나로 앱 · CLI · VS Code 확장의 허용 모델, 샌드박스 상한, 명령어 `Allow/Deny` 정책을 똑같이 통제합니다.
 
 ---
 
@@ -304,22 +307,22 @@ description: 개인 공통 응답 및 커밋 규칙
 
 ---
 
-# 🔌 Part 4. Hook & MCPs (말로 시켜서 바로 세팅)
+# 🛡️ Part 4. 보안 Hook 가드레일 & 사내 MCP 정책
 
-### 🔹 Step 4-1. Hook 설정법 (위험한 터미널 명령 자동 차단기)
+### 🔹 Step 4-1. Hook 설정법 (위험 명령어 · `.env` 접근 자동 차단기)
 
-> **핵심:** 문서로 적는 `Rule`은 가끔 무시될 수 있지만, **`Hook`(`.agents/hooks.json`)은 명령어 실행 직전(`PreToolUse`)에 스크립트가 먼저 검사해 100% 강제로 막아주는 안전장치**입니다.
+> **핵심:** 문서로 적는 `Rule`은 가끔 무시될 수 있지만, **`Hook`(`.agents/hooks.json`)은 명령어 실행 직전(`PreToolUse`)에 스크립트가 먼저 검사해 파괴적 명령과 `.env` 시크릿 노출을 100% 코드 레벨에서 막아주는 안전장치**입니다.
 
 | 주요 시점 | 언제 도나? | 현업에서 주로 쓰는 곳 |
 | :--- | :--- | :--- |
-| **`PreToolUse`** | 터미널 명령 등을 실행하기 직전 | `rm -rf`, `DROP TABLE`, 강제 푸시 같은 위험 명령 자동 차단 |
+| **`PreToolUse`** | 터미널 명령·파일 도구 실행 직전 | `rm -rf`, `DROP TABLE`, `git push --force`, **`.env` 읽기·출력** 자동 차단 |
 | **`PostToolUse`** | 파일 수정이나 명령이 끝난 직후 | 코드 고친 뒤 자동으로 포맷터·린터 돌려 문법 정리 |
-| **`SessionStart` / `Stop`** | 대화 시작할 때 / 작업 끝날 때 | 사내 환경변수 확인, 작업 내역 로그 남기기 |
+| **`SessionStart` / `Stop`** | 대화 시작할 때 / 작업 끝날 때 | 사내 환경변수 확인, 작업 내역 감사 로그 남기기 |
 
 1️⃣ **복잡한 JSON 문법을 외울 필요 없이 에이전트에게 말로 시켜 바로 세팅합니다**:
 
 ```text
-터미널 명령을 실행하기 전에 rm -rf나 DROP TABLE, git push --force가 들어있으면 자동으로 실행을 막아주는 .agents/hooks.json 설정과 파이썬 차단 스크립트를 만들어줘.
+터미널 명령이나 파일 조회를 실행하기 전에 rm -rf, DROP TABLE, git push --force 또는 .env 파일 접근이 들어있으면 자동으로 실행을 막아주는 .agents/hooks.json 설정과 파이썬 차단 스크립트를 만들어줘.
 ```
 
 <details class="file-list-details">
@@ -330,7 +333,7 @@ description: 개인 공통 응답 및 커밋 규칙
 {
   "safety-guard": {
     "PreToolUse": [{
-      "matcher": "run_command",
+      "matcher": "run_command|read_file",
       "hooks": [{ "type": "command", "command": "python3 ./guard.py", "timeout": 5 }]
     }]
   }
@@ -343,29 +346,21 @@ description: 개인 공통 응답 및 커밋 규칙
 2️⃣ **정말 막히는지 바로 시험해보기**:
 
 ```text
-방금 걸어둔 차단이 잘 작동하는지 보게 DROP TABLE users 글자가 들어간 테스트 출력 명령을 터미널에서 한 번 실행해봐.
+방금 걸어둔 차단이 잘 작동하는지 보게 DROP TABLE users 나 .env 내용이 포함된 테스트 명령을 터미널에서 한 번 실행해봐.
 ```
 
 ---
 
-### 🔹 Step 4-2. MCP 설정법 (내 PC 도구 · 사내 API 연결하기)
+### 🔹 Step 4-2. 기업 환경에서의 사내 MCP 보안 정책 (화이트리스트 안내)
 
-> **핵심:** 사내 DB 조회기나 이슈 트래커, 내 PC의 상태 확인 스크립트를 **MCP(`mcp_config.json`)**로 등록해 두면 에이전트가 기본 도구처럼 바로 꺼내 씁니다.
+> **핵심:** 엔터프라이즈 보안 환경에서는 **개발자 PC에서 임의의 로컬 MCP 서버를 직접 띄워 연결하는 방식이 제한**되며, 관리자가 사전 검토·승인한 사내 공용 MCP만 화이트리스트로 안전하게 연동합니다.
 
-| 연결 방식 | 설정에 넣는 값 | 언제 쓰나? |
+| 구분 | 기업 보안 정책 | 비고 |
 | :--- | :--- | :--- |
-| **1. 내 PC 스크립트 (Stdio)** | `"command"`, `"args"`, `"env"` | 내 PC에서 도는 파이썬/Node 스크립트, 로컬 DB, Git 도구 연결 |
-| **2. 사내 원격 서버 (HTTP)** | `"url": "https://.../mcp"` | 사내 서버에 띄워 둔 공용 MCP 주소 한 줄 연결 |
+| **개인 로컬 MCP 서버** | **기본 차단 (실습 제외)** | 미검증 로컬 프로세스 실행 및 사내 데이터 유출 방지 |
+| **사내 승인 공용 MCP** | **관리자 화이트리스트 허용** | 콘솔 **`Allowed server configuration`**에 등록된 사내 공식 MCP만 연결 |
 
-1️⃣ **추가 설치 없이 파이썬 기본 기능만으로 돌아가는 로컬 MCP 서버와 설정 예시를 바로 만들어 봅니다**:
-
-```text
-별도 패키지 설치 없이 파이썬 기본 기능만으로 현재 Git 변경 파일 목록이랑 열려있는 포트 번호를 알려주는 로컬 MCP 서버를 만들고, mcp_config.json 등록 예시도 함께 보여줘.
-```
-
-2️⃣ **설정 파일 위치 & 연결 확인 메뉴**:
-- 개인 전체 적용은 **`~/.gemini/config/mcp_config.json`**, 플러그인 포함 시 **`plugins/<이름>/mcp_config.json`**에 둡니다.
-- 화면 우측 상단 **`Additional Options (...)` ➔ `MCP Servers`**를 누르면 연결 상태와 켜진 도구 목록을 한눈에 볼 수 있습니다.
+- **확인 메뉴**: 승인된 사내 MCP가 배포된 환경에서는 화면 우측 상단 **`Additional Options (...)` ➔ `MCP Servers`**에서 허용된 서버와 도구 목록을 확인할 수 있습니다.
 
 ---
 
